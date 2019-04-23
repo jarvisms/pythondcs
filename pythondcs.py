@@ -78,7 +78,11 @@ class DCSSession:
         # accidental flooding of the server if used within multithreaded loops
         self.lock = RLock()
         self.s = requests.Session()
+        self.s.stream = True
         self.rooturl = rooturl + "/api"
+        self.username = None
+        self.appVersion = None
+        self.role = None
         if None not in (username, password):
             self.login(username, password)
         else:
@@ -89,7 +93,7 @@ class DCSSession:
         An authentication token (cookie) will be stored for this session.
         Must be provided with a username and password.
         """
-        subpath = "/account/login"
+        subpath = "/account/login/"
         s  = self.s
         if len(s.cookies) > 0:
             self.logout()
@@ -100,40 +104,49 @@ class DCSSession:
                     )
             reply.raise_for_status()
             result = reply.json()
-            print(f"Successfully logged in to DCS {result['appVersion']} as '{result['username']}' with {result['role']} privileges")
+            self.username = result['username']
+            self.appVersion = result['appVersion']
+            self.role = result['role']
+            print(f"Successfully logged in to DCS {self.appVersion} as '{self.username}' with {self.role} privileges")
         except requests.exceptions.HTTPError as err:
             r = err.response
             print(f"{r.status_code}: {r.reason}, '{r.text}'\n{r.url}")
         self.s = s
     def logout(self):
         """Logs out of the current DCS session."""
-        subpath = "/account/logout"
+        subpath = "/account/logout/"
         with self.lock:
             self.s.post(self.rooturl+subpath)
+        self.username = None
+        self.appVersion = None
+        self.role = None
         print("Logged Out of DCS")
     def __del__(self):
         """Logs out of DCS upon deletion and garbage collection of this object"""
         self.logout()
-    def get_meters(self):
+    def get_meters(self, id=None):
         """
-        Returns a list of all meters defined in DCS including the registers
-        for each meter.
+        Returns a list of all meters defined in DCS, or the one with the given
+        id. Returned object will includ the registers for each meter.
         This is a direct equivelent to the "Get meters" API call.
         """
-        subpath = "/Meters"
+        subpath = "/Meters/"
+        id = str(int(id)) if id is not None else ""
         with self.lock:
-            reply = self.s.get(self.rooturl+subpath, stream=True)
+            reply = self.s.get(self.rooturl+subpath+id)
         reply.raise_for_status()
         return reply.json()
-    def get_vms(self):
+    def get_vms(self, id=None):
         """
-        Returns a list of all virtual meters defined in DCS. Each virtual
-        meter object will contain 1 or more register alias objects.
+        Returns a list of all virtual meters defined in DCS, or the one
+        with the given id. Each virtual meter object will contain 1 or more
+        register alias objects.
         This is a direct equivelent to the "Get virtual meters" API call.
         """
-        subpath = "/VirtualMeters"
+        subpath = "/VirtualMeters/"
+        id = str(int(id)) if id is not None else ""
         with self.lock:
-            reply = self.s.get(self.rooturl+subpath, stream=True)
+            reply = self.s.get(self.rooturl+subpath+id)
         reply.raise_for_status()
         return reply.json()
     def get_readings(self, id, isVirtual=False, start=None, end=None,
@@ -178,10 +191,10 @@ class DCSSession:
             'source'            : source  # Enum:"automatic" "manual" "merged"
         }
         if isVirtual:   # Get correct key and url ready
-            subpath = "/VirtualMeterReadings/list"
+            subpath = "/VirtualMeterReadings/list/"
             dataparams["virtualMeterId"] = int(id)
         else:
-            subpath = "/registerReadings/list"
+            subpath = "/registerReadings/list/"
             dataparams["registerId"] = int(id)
         # Convert to ISO strings assuming datetimes or dates were given
         if type(dataparams["start"]) in (datetime, date):
@@ -193,7 +206,7 @@ class DCSSession:
         # Actually get the data and stream it into the json iterative decoder
         with self.lock:
             # Stream the response into json decoder for efficiency
-            reply = self.s.get(self.rooturl+subpath, params=dataparams, stream=True)
+            reply = self.s.get(self.rooturl+subpath, params=dataparams)
             reply.raise_for_status()    # Raise exception if not 2xx status
             print(f"Got readings for {'VM' if isVirtual else 'R'}{id}, server response time: {reply.elapsed.total_seconds()}s")
         if iterator and IJSONAVAILABLE:
@@ -201,12 +214,14 @@ class DCSSession:
             return _iterjson_reads(reply)
         else:
             return _json_reads(reply)
-    def get_idcs(self):
+    def get_idcs(self, macAddress=None):
         """Get a detailed list of all IDCs known to the server
+        or the one specified by macAddress (as an unsigned integer)
         NOT OFFICIALLY DOCUMENTED - USE AT YOUR OWN RISK"""
-        subpath = "/Idcs"
+        subpath = "/Idcs/"
+        macAddress = str(int(macAddress)) if macAddress is not None else ""
         with self.lock:
-            reply = self.s.get(self.rooturl+subpath, stream=True)
+            reply = self.s.get(self.rooturl+subpath+macAddress)
         reply.raise_for_status()
         return reply.json()
     def get_idc_settings(self, macAddress):
@@ -215,18 +230,79 @@ class DCSSession:
         NOT OFFICIALLY DOCUMENTED - USE AT YOUR OWN RISK"""
         subpath = "/Idcs/settings/"
         with self.lock:
-            reply = self.s.get(self.rooturl+subpath+str(macAddress), stream=True)
+            reply = self.s.get(self.rooturl+subpath+str(int(macAddress)))
         reply.raise_for_status()
         return reply.json()
+    def update_idc_settings(self, macAddress, settings):
+        """Update the IDC settings for the IDC with the given macAddress
+        (as an unsigned integer). setting of the same form as get_idc_settings()
+        Any missing parameters will be defaulted to zero/blank so this
+        could be destructive. A read-modify-write process is advised.
+        NOT OFFICIALLY DOCUMENTED - USE AT YOUR OWN RISK"""
+        subpath = "/idcs/settings/"
+        with self.lock:
+            reply = self.s.put(self.rooturl+subpath,
+                json={"macAddress":macAddress, "idcSettings":settings}
+            )
+        reply.raise_for_status()
     def get_modbus_devices_by_idc(self, macAddress):
         """Get details of all Modbus Devices under the IDC with the given
         macAddress (as an unsigned integer)
         NOT OFFICIALLY DOCUMENTED - USE AT YOUR OWN RISK"""
         subpath = "/ModbusDevices/byIdc/"
         with self.lock:
-            reply = self.s.get(self.rooturl+subpath+str(macAddress), stream=True)
+            reply = self.s.get(self.rooturl+subpath+str(int(macAddress)))
         reply.raise_for_status()
         return reply.json()
+    def get_modbus_device_by_id(self, id):
+        """Get Modbus Device with the given id (as an unsigned integer)
+        NOT OFFICIALLY DOCUMENTED - USE AT YOUR OWN RISK"""
+        subpath = "/ModbusDevices/"
+        with self.lock:
+            reply = self.s.get(self.rooturl+subpath+str(int(id)))
+        reply.raise_for_status()
+        return reply.json()
+    def update_modbus_device(self, device):
+        """Updates a modbus device defined by 'device' with those parameters.
+        Any missing parameters will be defaulted to zero/blank so this
+        could be destructive. A read-modify-write process is advised.
+        Then returns the resulting modbus device (like get_modbus_device_by_id)
+        NOT OFFICIALLY DOCUMENTED - USE AT YOUR OWN RISK"""
+        subpath = "/ModbusDevices/"
+        with self.lock:
+            reply = self.s.put(self.rooturl+subpath, json=device)
+        reply.raise_for_status()
+        return reply.json()
+    def add_modbus_device(self, device):
+        """Adds the modbus device defined by 'device' with those parameters.
+        Parameters are 'address':<int>, 'description':<str>, 'serialNumber':<str>
+        'deviceType':'pulseCounter'|'radioReceiver', 'macAddress':<int> 
+        Then returns the resulting modbus device (like get_modbus_device_by_id)
+        NOT OFFICIALLY DOCUMENTED - USE AT YOUR OWN RISK"""
+        subpath = "/ModbusDevices/"
+        with self.lock:
+            reply = self.s.post(self.rooturl+subpath, json=device)
+        reply.raise_for_status()
+        return reply.json()
+    def command_modbus_device(self, id, command):
+        """Executes 'command' on the modbus device with 'id'
+        Only accepts commands: "testComms", "setup", "resetBuffer", and only
+        Pulse Counters or Radio Receivers will accept "setup" or "resetBuffer"
+        NOT OFFICIALLY DOCUMENTED - USE AT YOUR OWN RISK"""
+        subpath = "/ModbusDevices/command/"
+        with self.lock:
+            reply = self.s.post(self.rooturl+subpath,
+                json={"id": int(id), "action":command})
+        reply.raise_for_status()
+        return reply.json()
+    def delete_modbus_device(self, id):
+        """Deletes the modbus device with the given 'id'.
+        NOT OFFICIALLY DOCUMENTED - USE AT YOUR OWN RISK"""
+        subpath = "/ModbusDevices/"
+        with self.lock:
+            reply = self.s.delete(self.rooturl+subpath++str(int(id)))
+        reply.raise_for_status()
+        print("Modbus Device Deleted Successfully")
     def get_meter_tree(self,id=0,recursively=True,groupsOnly=False,withoutRegister=False):
         """Gets potentially all Meter Groups ("Folders"), Meter, Registers, and
         Virtual Meters in the various sub-groups.
@@ -253,15 +329,14 @@ class DCSSession:
                     "recursively":recursively,
                     "groupsOnly":groupsOnly,
                     "withoutRegister":withoutRegister,
-                },
-            stream=True
+                }
             )
         reply.raise_for_status()
         return reply.json()
     def get_calibration_reads(self,registerId):
         """Retreive a list of all calibration readings for the given registerId
         NOT OFFICIALLY DOCUMENTED - USE AT YOUR OWN RISK"""
-        subpath = "/CalibrationReadings"
+        subpath = "/CalibrationReadings/"
         with self.lock:
             reply = self.s.get(
                 self.rooturl+subpath,
@@ -269,8 +344,7 @@ class DCSSession:
                     "registerId":registerId,
                     "startIndex":0,
                     "maxCount":2**31-1,
-                },
-            stream=True)
+                })
         reply.raise_for_status()
         # Just get relevent parts of the object returned
         result = reply.json()["calibrationReadings"]
@@ -281,3 +355,44 @@ class DCSSession:
             item["startTime"] = datetime.strptime(
                 item["startTime"],"%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
         return result
+    def get_meters_by_idc(self, macAddress):
+        """Returns a list of all meters defined in DCS (excluding registers)
+        under the IDC with the given macAddress (as an unsigned integer)
+        NOT OFFICIALLY DOCUMENTED - USE AT YOUR OWN RISK"""
+        subpath = "/Meters/byIdc/"
+        with self.lock:
+            reply = self.s.get(self.rooturl+subpath+str(macAddress))
+        reply.raise_for_status()
+        return reply.json()
+    def update_meter(self, settings):
+        """Updates a meter defined by 'settings' with those parameters.
+        Any missing parameters will be defaulted to zero/blank so this
+        could be destructive. A read-modify-write process is advised.
+        Returns equivelent of get_meters(id)
+        NOT OFFICIALLY DOCUMENTED - USE AT YOUR OWN RISK"""
+        subpath = "/Meters/"
+        with self.lock:
+            reply = self.s.put(self.rooturl+subpath, json=settings)
+        reply.raise_for_status()
+        return reply.json()
+    def get_metertypes(self, id=None):
+        """Returns a list of all Meter Types defined in DCS or the one given by
+        the given id. Returned object will include Register Types.
+        NOT OFFICIALLY DOCUMENTED - USE AT YOUR OWN RISK"""
+        subpath = "/MeterTypes/"
+        id = str(int(id)) if id is not None else ""
+        with self.lock:
+            reply = self.s.get(self.rooturl+subpath+id)
+        reply.raise_for_status()
+        return reply.json()
+    def add_registers(self, meterId, registerTypeIds):
+        """Add new registers of the given type ids (list) to the meter with given id
+        NOT OFFICIALLY DOCUMENTED - USE AT YOUR OWN RISK"""
+        subpath = "/Registers/add/"
+        with self.lock:
+            reply = self.s.post(self.rooturl+subpath,
+                json={ "meterId":int(meterId),
+                    "registerTypeIds":tuple(registerTypeIds) }
+                )
+        reply.raise_for_status()
+        print("Registers Added Successfully")
