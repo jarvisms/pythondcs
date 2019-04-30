@@ -105,9 +105,8 @@ class DCSSession:
             reply.raise_for_status()
             result = reply.json()
             self.username = result['username']
-            self.appVersion = result['appVersion']
             self.role = result['role']
-            print(f"Successfully logged in to DCS {self.appVersion} as '{self.username}' with {self.role} privileges")
+            print(f"Successfully logged in to DCS as '{self.username}' with {self.role} privileges")
         except requests.exceptions.HTTPError as err:
             r = err.response
             print(f"{r.status_code}: {r.reason}, '{r.text}'\n{r.url}")
