@@ -46,7 +46,7 @@ To create a DCS Session, create an object using the URL to your server, and prov
 ```
 dcs = DCSSession("https://url-of-dcs/", "myUsername", "MySuperSecurePassword")
 ```
-This will then return: `Successfully logged in to DCS 3.0.9 as 'myUsername' with Viewer privileges`
+This will then return: `Successfully logged in to DCS as 'myUsername' with Viewer privileges`
 
 This session object will obtain and store your authentication cookie for the lifetime of the object.
 
@@ -146,10 +146,11 @@ This is likely the most important feature and the reason you are using this modu
 The same method has been provided to access Register Data and Virtual Meter Data even though the underlying API calls are different. The parameters are essentially the same and result set have the same structure and so these have a single method within this module for convenience and consistency.
 
 ```
-results = dcs.get_readings(self, id, isVirtual, start, end, decimalPlaces, calibrated, interpolated, useLocalTime, integrationPeriod, source, iterator)
+results = dcs.get_readings(id, isVirtual, start, end, decimalPlaces, calibrated, interpolated, useLocalTime, integrationPeriod, source, iterator)
 ```
-The only required items are **id**, **isVirtual**. The other options are optional and relate to options also available on the Web front end of DCS.
+The only required item is **id**. The other options are optional and relate to options also available on the Web front end of DCS.
 -  **id** - of the register or virtual meter (Required)
+-  **isVirtual** - True if id refers to a virtual meter ID, otherwise False for a register. (Optional, default False)
 -  **start** - a datetime or date object (Optional, default omitted), such as `datetime.date(2019,1,1)`
 -  **end** - a datetime or date object (Optional, default ommitted), as above
 -  **decimalPlaces** - of the returned data 0-15 (Optional, default 15)
@@ -224,7 +225,7 @@ Any exceptions raised by the underlying API call will be propagated to the calle
 
 ### Concurrent Transactions
 
-This module has not specifically designed to be thread-safe, but will probably work in multi-threaded environments just fine. There is however a thread-lock which deliberately limits each instance of a DCSSession object to a single concurrent transaction at a time (irrespective of number of threads which may be trying to work with it). This is primarily to protect the DCS server itself from being overwhelmed with transactions. However there is no limit to the rate at which consecutive transactions can occur. Therefore care must be taken not to overwhelm the server with numerous small but fast requests - including invalid ones raising errors. Concurrent transactions are still possible with multiple DCSSession objects or, of course, multi-process environments.
+This module has not specifically been designed to be thread-safe, but will probably work in multi-threaded environments just fine. There is however a thread-lock which deliberately limits each instance of a DCSSession object to a single concurrent transaction at a time (irrespective of number of threads which may be trying to work with it). This is primarily to protect the DCS server itself from being overwhelmed with transactions. However there is no limit to the rate at which consecutive transactions can occur. Therefore care must be taken not to overwhelm the server with numerous small but fast requests - including invalid ones raising errors. Concurrent transactions are still possible with multiple DCSSession objects or, of course, multi-process environments.
 
 ### Other functions
 

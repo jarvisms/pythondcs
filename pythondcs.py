@@ -50,6 +50,19 @@ def machex_to_int(MacHex):
     assert 12 <= len(MacHex) <= 17, "String of unexpected size"
     return int(MacHex.replace(":","").lower(), 16)
 
+def get_meters_from_group(group, meters=[]):
+    """
+    Produces a flat list of meters from a possibly nested group.
+    Given the output of DCSSession.get_meter_tree(), the result should be
+    equivelent to that of DCSSession.get_meters() after both were sorted.
+    This is useful for getting a flat list from a particular point in the tree.
+    """
+    if group["hasMeters"]:
+        meters.extend(group["meters"])
+    for subgroup in group["meterGroups"]:
+        meters=flatten(subgroup,meters)
+    return meters
+
 class DCSSession:
     """
     The DCSSession class can be used to login and interface with a
@@ -81,7 +94,6 @@ class DCSSession:
         self.s.stream = True
         self.rooturl = rooturl + "/api"
         self.username = None
-        self.appVersion = None
         self.role = None
         if None not in (username, password):
             self.login(username, password)
@@ -95,7 +107,7 @@ class DCSSession:
         """
         subpath = "/account/login/"
         s  = self.s
-        if len(s.cookies) > 0:
+        if len(s.cookies) > 0 or self.username is not None:
             self.logout()
         try:
             with self.lock:
@@ -117,12 +129,12 @@ class DCSSession:
         with self.lock:
             self.s.post(self.rooturl+subpath)
         self.username = None
-        self.appVersion = None
         self.role = None
         print("Logged Out of DCS")
     def __del__(self):
         """Logs out of DCS upon deletion and garbage collection of this object"""
-        self.logout()
+        if self.username is not None:
+          self.logout()
     def get_meters(self, id=None):
         """
         Returns a list of all meters defined in DCS, or the one with the given
@@ -158,6 +170,8 @@ class DCSSession:
         "Get register readings" and "Get virtual meter readings".
         parameters are as required by DCS:
         - "id" - of the register or virtual meter (Required)
+        - "isVirtual" - True if id refers to a virtual meter ID, otherwise
+            False for a register. (Optional, default False)
         - "start" - a datetime or date object (Optional, default omitted)
         - "end" - a datetime or date object (Optional, default ommitted)
         - "decimalPlaces" - of the returned data 0-15 (Optional, default 15)
