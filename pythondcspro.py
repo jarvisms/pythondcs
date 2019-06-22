@@ -113,7 +113,7 @@ class DCSSession(DCSSession):
         """Deletes the modbus device with the given 'id'."""
         subpath = "/ModbusDevices/"
         with self.lock:
-            reply = self.s.delete(self.rooturl+subpath++str(int(id)))
+            reply = self.s.delete(self.rooturl+subpath+str(int(id)))
         reply.raise_for_status()
         print("Modbus Device Deleted Successfully")
     def get_meter_tree(self,id=0,recursively=True,groupsOnly=False,withoutRegister=False):
@@ -145,26 +145,34 @@ class DCSSession(DCSSession):
             )
         reply.raise_for_status()
         return reply.json()
-    def get_calibration_reads(self,registerId):
-        """Retreive a list of all calibration readings for the given registerId"""
+    def get_calibration_reads(self,registerId, startIndex=0, maxCount=2**31-1):
+        """Retreive a list of calibration readings for the given registerId"""
         subpath = "/CalibrationReadings/"
         with self.lock:
             reply = self.s.get(
                 self.rooturl+subpath,
                 params = {
                     "registerId":registerId,
-                    "startIndex":0,
-                    "maxCount":2**31-1,
+                    "startIndex":startIndex,
+                    "maxCount":maxCount,
                 })
         reply.raise_for_status()
         # Just get relevent parts of the object returned
         result = reply.json()["calibrationReadings"]
         # Convert the datetime strings to real datetime objects which are tz aware
         for item in result:
-            item["timestamp"] = datetime.strptime(
-                item["timestamp"],"%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
-            item["startTime"] = datetime.strptime(
-                item["startTime"],"%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
+            try:
+                item["timestamp"] = datetime.strptime(
+                    item["timestamp"],"%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
+            except ValueError:
+                item["timestamp"] = datetime.strptime(
+                    item["timestamp"],"%Y-%m-%dT%H:%M:%S.%f").replace(tzinfo=timezone.utc)
+            try:
+                item["startTime"] = datetime.strptime(
+                    item["startTime"],"%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
+            except ValueError:
+                item["startTime"] = datetime.strptime(
+                    item["startTime"],"%Y-%m-%dT%H:%M:%S.%f").replace(tzinfo=timezone.utc)
         return result
     def get_meters_by_idc(self, macAddress):
         """Returns a list of all meters defined in DCS (excluding registers)

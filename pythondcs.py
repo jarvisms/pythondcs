@@ -21,7 +21,10 @@ def _iterjson_reads(reply):
     n=0
     for item in ijson.items(raw, 'item'):
         # Convert to datetimes and floats where needed
-        item["startTime"] = datetime.strptime(item["startTime"],"%Y-%m-%dT%H:%M:%S%z")
+        try:
+            item["startTime"] = datetime.strptime(item["startTime"],"%Y-%m-%dT%H:%M:%S%z")
+        except ValueError:
+            item["startTime"] = datetime.strptime(item["startTime"],"%Y-%m-%dT%H:%M:%S.%f%z")
         if type(item["totalValue"]) == ijson.common.decimal.Decimal:
             item["totalValue"] = float(item["totalValue"])
         if type(item["periodValue"]) == ijson.common.decimal.Decimal:
@@ -36,7 +39,10 @@ def _json_reads(reply):
     results = reply.json()
     for item in results:
         # Convert to datetimes
-        item["startTime"] = datetime.strptime(item["startTime"],"%Y-%m-%dT%H:%M:%S%z")
+        try:
+            item["startTime"] = datetime.strptime(item["startTime"],"%Y-%m-%dT%H:%M:%S%z")
+        except ValueError:
+            item["startTime"] = datetime.strptime(item["startTime"],"%Y-%m-%dT%H:%M:%S.%f%z")
     print(f"All {len(results)} readings retreived")
     return results
 
