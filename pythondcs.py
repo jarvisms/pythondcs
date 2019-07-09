@@ -8,6 +8,56 @@ try:
 except ImportError:
     IJSONAVAILABLE = False
 
+if hasattr(datetime,"fromisoformat"):
+    def _fromisoformat(isostr):
+        """Converts ISO formatted datetime strings to datetime objects
+        using built in methods but with added support for "Z" timezones.
+        Generally supported by Python 3.7+"""
+        return datetime.fromisoformat(isostr.replace('Z', '+00:00', 1))
+else:
+    def _fromisoformat(isostr):
+        """Converts ISO formatted datetime strings to datetime objects
+        using string manipulations for Python 3.6 and lower where the built in
+        "fromisoformat" method isn't available. This function is slower but
+        much faster than "strptime", but not as forgiving if the strings are
+        incorrectly formatted.
+        Expected format: YYYY*MM*DD*HH*MM*SS[.f][Z|[{+|-}HH*MM]] where * can
+        match any single character, and "f" can be up to 6 digits"""
+        isostr = isostr.replace('Z', '+00:00', 1)
+        strlen = len(isostr)
+        tz_pos = (isostr.find("+",19)+1 or isostr.find("-",19)+1 or strlen+1)-1
+        if tz_pos == strlen:
+            tz = None
+        else:
+            tz_parts = (
+                int(isostr[tz_pos+1:tz_pos+3]),
+                int(isostr[tz_pos+4:tz_pos+6]),
+            )
+            if not any(tz_parts):
+                tz = timezone.utc
+            else:
+                tz = timezone(
+                    (1 if isostr[tz_pos] == "+" else -1)
+                    * timedelta(
+                        hours=tz_parts[0],
+                        minutes=tz_parts[1],
+                    )
+                )
+        return datetime(
+            int(isostr[0:4]),   # Year
+            int(isostr[5:7]),   # Month
+            int(isostr[8:10]),  # Day
+            int(isostr[11:13]), # Hour
+            int(isostr[14:16]), # Minute
+            int(isostr[17:19]), # Second
+            (
+                int(isostr[20:tz_pos].ljust(6,"0"))
+                if strlen > 19 and isostr[19] == "."
+                else 0
+            ),  # Microsecond
+            tz, # Timezone
+        )
+
 def _iterjson_reads(reply):
     """Takes the http response and decodes the json payload by streaming it,
     decompressing it if required, and decoding it into an ijson iterator as
@@ -21,10 +71,7 @@ def _iterjson_reads(reply):
     n=0
     for item in ijson.items(raw, 'item'):
         # Convert to datetimes and floats where needed
-        try:
-            item["startTime"] = datetime.strptime(item["startTime"],"%Y-%m-%dT%H:%M:%S%z")
-        except ValueError:
-            item["startTime"] = datetime.strptime(item["startTime"],"%Y-%m-%dT%H:%M:%S.%f%z")
+        item["startTime"] =_fromisoformat(item["startTime"])
         if type(item["totalValue"]) == ijson.common.decimal.Decimal:
             item["totalValue"] = float(item["totalValue"])
         if type(item["periodValue"]) == ijson.common.decimal.Decimal:
@@ -39,10 +86,7 @@ def _json_reads(reply):
     results = reply.json()
     for item in results:
         # Convert to datetimes
-        try:
-            item["startTime"] = datetime.strptime(item["startTime"],"%Y-%m-%dT%H:%M:%S%z")
-        except ValueError:
-            item["startTime"] = datetime.strptime(item["startTime"],"%Y-%m-%dT%H:%M:%S.%f%z")
+        item["startTime"] = _fromisoformat(item["startTime"])
     print(f"All {len(results)} readings retreived")
     return results
 

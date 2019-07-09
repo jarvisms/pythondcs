@@ -161,18 +161,10 @@ class DCSSession(DCSSession):
         result = reply.json()["calibrationReadings"]
         # Convert the datetime strings to real datetime objects which are tz aware
         for item in result:
-            try:
-                item["timestamp"] = datetime.strptime(
-                    item["timestamp"],"%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
-            except ValueError:
-                item["timestamp"] = datetime.strptime(
-                    item["timestamp"],"%Y-%m-%dT%H:%M:%S.%f").replace(tzinfo=timezone.utc)
-            try:
-                item["startTime"] = datetime.strptime(
-                    item["startTime"],"%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
-            except ValueError:
-                item["startTime"] = datetime.strptime(
-                    item["startTime"],"%Y-%m-%dT%H:%M:%S.%f").replace(tzinfo=timezone.utc)
+            item["timestamp"] = _fromisoformat(
+                item["timestamp"]).replace(tzinfo=timezone.utc)
+            item["startTime"] = _fromisoformat(
+                item["startTime"]).replace(tzinfo=timezone.utc)
         return result
     def get_meters_by_idc(self, macAddress):
         """Returns a list of all meters defined in DCS (excluding registers)
