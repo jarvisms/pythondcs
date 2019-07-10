@@ -217,3 +217,56 @@ class DCSSession(DCSSession):
                 )
         reply.raise_for_status()
         print("Registers Added Successfully")
+    def get_mega_readings(self, *args, maxwindow=timedelta(days=549),
+        start=None, end=None, iterator=False, **kwargs):
+        """Breaks up a potentially very large get_readings transaction into numerous
+        smaller ones based on a maxwindow size (a timedelta defaulting to about 18
+        months) and provides the result as if one single transaction was completed;
+        either a very large list of readings or a single iterator over all readings
+        from all constituent underlying transactions. Aside from maxwindow, all
+        arguments are as per get_readings and are passed through"""
+        if start is None:
+            start = date.today()
+        if end is None:
+            end = start + timedelta(days=1)
+        if end < start: # Swap dates if reversed
+            start, end = end, start
+        elif start == end:
+            end = start + timedelta(minutes=30)
+        maxwindow=abs(maxwindow)  # Strip negative durations and dont go too small
+        if maxwindow < timedelta(days=1):
+            maxwindow = timedelta(days=1)
+        reqwindow = end - start # Requested window/duration
+        print(f"{reqwindow} requested and the maximum limit is {maxwindow}")
+        if reqwindow <= maxwindow: # If the period is smaller than max, use directly
+            print("Only 1 transaction is needed")
+            return self.get_readings(*args, start=start, end=end, iterator=iterator, **kwargs)
+        else:   # If the period is larger than max, then break it down
+            reqHHs = reqwindow // timedelta(minutes=30) # Requested duration in HalfHours
+            maxHHs = maxwindow // timedelta(minutes=30) # Maximum duration in Halfhours
+            d = 2   # Start by dividing into 2 intervals, since 1 was tested above
+            while True:
+                # Divide into incrementally more/smaller peices and check
+                i, r = divmod(reqHHs, d)
+                # Once the peices are small enough, stop.
+                # If there is no remainder, take i, otherwise the remainders will
+                # be added to other peices so add 1 and check that instead.
+                if (i+1 if r else i) <= maxHHs: break
+                d += 1
+            # Make a list of HH sample sizes, with the remainders added onto the
+            # first sets. Such as 11, 11, 10 for a total of 32.
+            HHBlocks = [i+1]*r + [i]*(d-r)
+            print(f"{len(HHBlocks)} transactions will be used")
+            Intervals=[]
+            IntervalStart = start   # The first starttime is the original start
+            for i in HHBlocks:
+                # Add calculated number of half hours on to the start time
+                IntervalEnd = IntervalStart + i * timedelta(minutes=30)
+                # Define each sample window  and start the next one after the last
+                Intervals.append({"start":IntervalStart,"end":IntervalEnd})
+                IntervalStart = IntervalEnd
+        # Create a generator which concatenates the readings from each transaction
+        concat = (reading for chunk in Intervals
+            for reading in self.get_readings(*args, iterator=iterator, **chunk, **kwargs))
+        # Return this generator if an iterator was requested, else give a list
+        return concat if iterator else list(concat)
