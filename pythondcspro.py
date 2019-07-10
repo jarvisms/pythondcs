@@ -41,7 +41,8 @@ class DCSSession(DCSSession):
         subpath = "/Idcs/"
         macAddress = str(int(macAddress)) if macAddress is not None else ""
         with self.lock:
-            reply = self.s.get(self.rooturl+subpath+macAddress)
+            reply = self.s.get(self.rooturl+subpath+macAddress,
+                timeout=self.timeout)
         reply.raise_for_status()
         return reply.json()
     def get_idc_settings(self, macAddress):
@@ -49,7 +50,8 @@ class DCSSession(DCSSession):
         (as an unsigned integer)"""
         subpath = "/Idcs/settings/"
         with self.lock:
-            reply = self.s.get(self.rooturl+subpath+str(int(macAddress)))
+            reply = self.s.get(self.rooturl+subpath+str(int(macAddress)),
+                timeout=self.timeout)
         reply.raise_for_status()
         return reply.json()
     def update_idc_settings(self, macAddress, settings):
@@ -60,7 +62,8 @@ class DCSSession(DCSSession):
         subpath = "/idcs/settings/"
         with self.lock:
             reply = self.s.put(self.rooturl+subpath,
-                json={"macAddress":macAddress, "idcSettings":settings}
+                json={"macAddress":macAddress, "idcSettings":settings},
+                timeout=self.timeout,
             )
         reply.raise_for_status()
     def get_modbus_devices_by_idc(self, macAddress):
@@ -68,14 +71,16 @@ class DCSSession(DCSSession):
         macAddress (as an unsigned integer)"""
         subpath = "/ModbusDevices/byIdc/"
         with self.lock:
-            reply = self.s.get(self.rooturl+subpath+str(int(macAddress)))
+            reply = self.s.get(self.rooturl+subpath+str(int(macAddress)),
+                timeout=self.timeout)
         reply.raise_for_status()
         return reply.json()
     def get_modbus_device_by_id(self, id):
         """Get Modbus Device with the given id (as an unsigned integer)"""
         subpath = "/ModbusDevices/"
         with self.lock:
-            reply = self.s.get(self.rooturl+subpath+str(int(id)))
+            reply = self.s.get(self.rooturl+subpath+str(int(id)),
+                timeout=self.timeout)
         reply.raise_for_status()
         return reply.json()
     def update_modbus_device(self, device):
@@ -85,7 +90,8 @@ class DCSSession(DCSSession):
         Then returns the resulting modbus device (like get_modbus_device_by_id)"""
         subpath = "/ModbusDevices/"
         with self.lock:
-            reply = self.s.put(self.rooturl+subpath, json=device)
+            reply = self.s.put(self.rooturl+subpath, json=device,
+                timeout=self.timeout)
         reply.raise_for_status()
         return reply.json()
     def add_modbus_device(self, device):
@@ -95,7 +101,8 @@ class DCSSession(DCSSession):
         Then returns the resulting modbus device (like get_modbus_device_by_id)"""
         subpath = "/ModbusDevices/"
         with self.lock:
-            reply = self.s.post(self.rooturl+subpath, json=device)
+            reply = self.s.post(self.rooturl+subpath, json=device,
+                timeout=self.timeout)
         reply.raise_for_status()
         return reply.json()
     def command_modbus_device(self, id, command):
@@ -106,14 +113,15 @@ class DCSSession(DCSSession):
         subpath = "/ModbusDevices/command/"
         with self.lock:
             reply = self.s.post(self.rooturl+subpath,
-                json={"id": int(id), "action":command})
+                json={"id": int(id), "action":command}, timeout=self.timeout)
         reply.raise_for_status()
         return reply.json()
     def delete_modbus_device(self, id):
         """Deletes the modbus device with the given 'id'."""
         subpath = "/ModbusDevices/"
         with self.lock:
-            reply = self.s.delete(self.rooturl+subpath+str(int(id)))
+            reply = self.s.delete(self.rooturl+subpath+str(int(id)),
+                timeout=self.timeout)
         reply.raise_for_status()
         print("Modbus Device Deleted Successfully")
     def get_meter_tree(self,id=0,recursively=True,groupsOnly=False,withoutRegister=False):
@@ -141,7 +149,8 @@ class DCSSession(DCSSession):
                     "recursively":recursively,
                     "groupsOnly":groupsOnly,
                     "withoutRegister":withoutRegister,
-                }
+                },
+                timeout=self.timeout
             )
         reply.raise_for_status()
         return reply.json()
@@ -155,7 +164,9 @@ class DCSSession(DCSSession):
                     "registerId":registerId,
                     "startIndex":startIndex,
                     "maxCount":maxCount,
-                })
+                },
+                timeout=self.timeout,
+                )
         reply.raise_for_status()
         # Just get relevent parts of the object returned
         result = reply.json()["calibrationReadings"]
@@ -171,7 +182,8 @@ class DCSSession(DCSSession):
         under the IDC with the given macAddress (as an unsigned integer)"""
         subpath = "/Meters/byIdc/"
         with self.lock:
-            reply = self.s.get(self.rooturl+subpath+str(macAddress))
+            reply = self.s.get(self.rooturl+subpath+str(macAddress),
+                timeout=self.timeout)
         reply.raise_for_status()
         return reply.json()
     def update_meter(self, settings):
@@ -181,7 +193,8 @@ class DCSSession(DCSSession):
         Returns equivelent of get_meters(id)"""
         subpath = "/Meters/"
         with self.lock:
-            reply = self.s.put(self.rooturl+subpath, json=settings)
+            reply = self.s.put(self.rooturl+subpath, json=settings,
+                timeout=self.timeout)
         reply.raise_for_status()
         return reply.json()
     def get_metertypes(self, id=None):
@@ -190,7 +203,7 @@ class DCSSession(DCSSession):
         subpath = "/MeterTypes/"
         id = str(int(id)) if id is not None else ""
         with self.lock:
-            reply = self.s.get(self.rooturl+subpath+id)
+            reply = self.s.get(self.rooturl+subpath+id, timeout=self.timeout)
         reply.raise_for_status()
         return reply.json()
     def add_registers(self, meterId, registerTypeIds):
@@ -199,7 +212,8 @@ class DCSSession(DCSSession):
         with self.lock:
             reply = self.s.post(self.rooturl+subpath,
                 json={ "meterId":int(meterId),
-                    "registerTypeIds":tuple(registerTypeIds) }
+                    "registerTypeIds":tuple(registerTypeIds) },
+                    timeout=self.timeout,
                 )
         reply.raise_for_status()
         print("Registers Added Successfully")

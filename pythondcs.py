@@ -1,6 +1,8 @@
 from datetime import datetime, date, timedelta, timezone
 from threading import RLock
 import requests
+from requests.adapters import HTTPAdapter
+from requests.packages.urllib3.util.retry import Retry
 
 try:
     import ijson, gzip
@@ -127,8 +129,14 @@ class DCSSession:
         # Lock used to limit sessions to 1 transaction at a time to avoid
         # accidental flooding of the server if used within multithreaded loops
         self.lock = RLock()
+        self.timeout = (3.05,120)   # Connect and Read timeouts
         self.s = requests.Session()
         self.s.stream = True
+        # Attempt up to 5 increasingly delayed retries for recoverable errors
+        self.s.mount(rooturl, HTTPAdapter(
+            max_retries=Retry(  # Delays between retries: 0, 1, 2, 4, 8 seconds
+                total=5, backoff_factor=0.5, status_forcelist=[ 502, 503, 504 ]
+            ) ))
         self.rooturl = rooturl + "/api"
         self.username = None
         self.role = None
@@ -149,7 +157,8 @@ class DCSSession:
         try:
             with self.lock:
                 reply = s.post(self.rooturl+subpath,
-                    json={"username":username,"password":password}
+                    json={"username":username,"password":password},
+                    timeout=self.timeout
                     )
             reply.raise_for_status()
             result = reply.json()
@@ -164,7 +173,7 @@ class DCSSession:
         """Logs out of the current DCS session."""
         subpath = "/account/logout/"
         with self.lock:
-            self.s.post(self.rooturl+subpath)
+            self.s.post(self.rooturl+subpath, timeout=self.timeout)
         self.username = None
         self.role = None
         print("Logged Out of DCS")
@@ -181,7 +190,7 @@ class DCSSession:
         subpath = "/Meters/"
         id = str(int(id)) if id is not None else ""
         with self.lock:
-            reply = self.s.get(self.rooturl+subpath+id)
+            reply = self.s.get(self.rooturl+subpath+id, timeout=self.timeout)
         reply.raise_for_status()
         return reply.json()
     def get_vms(self, id=None):
@@ -194,7 +203,7 @@ class DCSSession:
         subpath = "/VirtualMeters/"
         id = str(int(id)) if id is not None else ""
         with self.lock:
-            reply = self.s.get(self.rooturl+subpath+id)
+            reply = self.s.get(self.rooturl+subpath+id, timeout=self.timeout)
         reply.raise_for_status()
         return reply.json()
     def get_readings(self, id, isVirtual=False, start=None, end=None,
@@ -256,7 +265,8 @@ class DCSSession:
         # Actually get the data and stream it into the json iterative decoder
         with self.lock:
             # Stream the response into json decoder for efficiency
-            reply = self.s.get(self.rooturl+subpath, params=dataparams)
+            reply = self.s.get(self.rooturl+subpath, params=dataparams,
+                timeout=self.timeout)
             reply.raise_for_status()    # Raise exception if not 2xx status
             print(f"Got readings for {'VM' if isVirtual else 'R'}{id}, server response time: {reply.elapsed.total_seconds()}s")
         if iterator and IJSONAVAILABLE:
