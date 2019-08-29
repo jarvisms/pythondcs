@@ -10,98 +10,6 @@ try:
 except ImportError:
     IJSONAVAILABLE = False
 
-if hasattr(datetime,"fromisoformat"):
-    def _fromisoformat(isostr):
-        """Converts ISO formatted datetime strings to datetime objects
-        using built in methods but with added support for "Z" timezones.
-        Generally supported by Python 3.7+"""
-        return datetime.fromisoformat(isostr.replace('Z', '+00:00', 1))
-else:
-    def _fromisoformat(isostr):
-        """Converts ISO formatted datetime strings to datetime objects
-        using string manipulations for Python 3.6 and lower where the built in
-        "fromisoformat" method isn't available. This function is slower but
-        much faster than "strptime", but not as forgiving if the strings are
-        incorrectly formatted.
-        Expected format: YYYY*MM*DD*HH*MM*SS[.f][Z|[{+|-}HH*MM]] where * can
-        match any single character, and "f" can be up to 6 digits"""
-        isostr = isostr.replace('Z', '+00:00', 1)
-        strlen = len(isostr)
-        tz_pos = (isostr.find("+",19)+1 or isostr.find("-",19)+1 or strlen+1)-1
-        if tz_pos == strlen:
-            tz = None
-        else:
-            tz_parts = (
-                int(isostr[tz_pos+1:tz_pos+3]),
-                int(isostr[tz_pos+4:tz_pos+6]),
-            )
-            if not any(tz_parts):
-                tz = timezone.utc
-            else:
-                tz = timezone(
-                    (1 if isostr[tz_pos] == "+" else -1)
-                    * timedelta(
-                        hours=tz_parts[0],
-                        minutes=tz_parts[1],
-                    )
-                )
-        return datetime(
-            int(isostr[0:4]),   # Year
-            int(isostr[5:7]),   # Month
-            int(isostr[8:10]),  # Day
-            int(isostr[11:13]), # Hour
-            int(isostr[14:16]), # Minute
-            int(isostr[17:19]), # Second
-            (
-                int(isostr[20:tz_pos].ljust(6,"0"))
-                if strlen > 19 and isostr[19] == "."
-                else 0
-            ),  # Microsecond
-            tz, # Timezone
-        )
-
-def _iterjson_reads(reply):
-    """Takes the http response and decodes the json payload by streaming it,
-    decompressing it if required, and decoding it into an ijson iterator as
-    elements are consumed. Convert timestapms to datetime objects and ensure
-    all Decimals are converted back to native floats"""
-    # Prepare to decompress on the fly if required
-    if reply.headers["content-encoding"] in ("gzip", "deflate"):
-        raw = gzip.open(reply.raw)
-    else:
-        raw = reply.raw
-    n=0
-    for item in ijson.items(raw, 'item'):
-        # Convert to datetimes and floats where needed
-        item["startTime"] =_fromisoformat(item["startTime"])
-        if type(item["totalValue"]) == ijson.common.decimal.Decimal:
-            item["totalValue"] = float(item["totalValue"])
-        if type(item["periodValue"]) == ijson.common.decimal.Decimal:
-            item["periodValue"] = float(item["periodValue"])
-        yield item  # Yield each item one at a time
-        n+=1
-    print(f"All {n} readings retreived")
-
-def _json_reads(reply):
-    """Takes the http response and decodes the json payload as one object
-    Convert timestamps to datetime objects"""
-    results = reply.json()
-    for item in results:
-        # Convert to datetimes
-        item["startTime"] = _fromisoformat(item["startTime"])
-    print(f"All {len(results)} readings retreived")
-    return results
-
-def macint_to_hex(MacInt):
-    """Converts integers to hex MAC address"""
-    assert 0 <= MacInt <= 0xFFFFFFFFFFFF, "Integer out of range"
-    return ":".join([format(MacInt,"012X")[x:x+2] for x in range(0,12,2)])
-
-def machex_to_int(MacHex):
-    """Converts hex MAC address to integers"""
-    assert 12 <= len(MacHex) <= 17, "String of unexpected size"
-    return int(MacHex.replace(":","").lower(), 16)
-
 class DCSSession:
     """
     The DCSSession class can be used to login and interface with a
@@ -115,6 +23,89 @@ class DCSSession:
     
     https://www.coherent-research.co.uk/support/extras/dcsapispec/
     """
+    if hasattr(datetime,"fromisoformat"):
+        @staticmethod
+        def _fromisoformat(isostr):
+            """Converts ISO formatted datetime strings to datetime objects
+            using built in methods but with added support for "Z" timezones.
+            Generally supported by Python 3.7+"""
+            return datetime.fromisoformat(isostr.replace('Z', '+00:00', 1))
+    else:
+        @staticmethod
+        def _fromisoformat(isostr):
+            """Converts ISO formatted datetime strings to datetime objects
+            using string manipulations for Python 3.6 and lower where the built in
+            "fromisoformat" method isn't available. This function is slower but
+            much faster than "strptime", but not as forgiving if the strings are
+            incorrectly formatted.
+            Expected format: YYYY*MM*DD*HH*MM*SS[.f][Z|[{+|-}HH*MM]] where * can
+            match any single character, and "f" can be up to 6 digits"""
+            isostr = isostr.replace('Z', '+00:00', 1)
+            strlen = len(isostr)
+            tz_pos = (isostr.find("+",19)+1 or isostr.find("-",19)+1 or strlen+1)-1
+            if tz_pos == strlen:
+                tz = None
+            else:
+                tz_parts = (
+                    int(isostr[tz_pos+1:tz_pos+3]),
+                    int(isostr[tz_pos+4:tz_pos+6]),
+                )
+                if not any(tz_parts):
+                    tz = timezone.utc
+                else:
+                    tz = timezone(
+                        (1 if isostr[tz_pos] == "+" else -1)
+                        * timedelta(
+                            hours=tz_parts[0],
+                            minutes=tz_parts[1],
+                        )
+                    )
+            return datetime(
+                int(isostr[0:4]),   # Year
+                int(isostr[5:7]),   # Month
+                int(isostr[8:10]),  # Day
+                int(isostr[11:13]), # Hour
+                int(isostr[14:16]), # Minute
+                int(isostr[17:19]), # Second
+                (
+                    int(isostr[20:tz_pos].ljust(6,"0"))
+                    if strlen > 19 and isostr[19] == "."
+                    else 0
+                ),  # Microsecond
+                tz, # Timezone
+            )
+    @staticmethod
+    def _iterjson_reads(reply):
+        """Takes the http response and decodes the json payload by streaming it,
+        decompressing it if required, and decoding it into an ijson iterator as
+        elements are consumed. Convert timestapms to datetime objects and ensure
+        all Decimals are converted back to native floats"""
+        # Prepare to decompress on the fly if required
+        if reply.headers["content-encoding"] in ("gzip", "deflate"):
+            raw = gzip.open(reply.raw)
+        else:
+            raw = reply.raw
+        n=0
+        for item in ijson.items(raw, 'item'):
+            # Convert to datetimes and floats where needed
+            item["startTime"] = DCSSession._fromisoformat(item["startTime"])
+            if type(item["totalValue"]) == ijson.common.decimal.Decimal:
+                item["totalValue"] = float(item["totalValue"])
+            if type(item["periodValue"]) == ijson.common.decimal.Decimal:
+                item["periodValue"] = float(item["periodValue"])
+            yield item  # Yield each item one at a time
+            n+=1
+        print(f"All {n} readings retreived")
+    @staticmethod
+    def _json_reads(reply):
+        """Takes the http response and decodes the json payload as one object
+        Convert timestamps to datetime objects"""
+        results = reply.json()
+        for item in results:
+            # Convert to datetimes
+            item["startTime"] = DCSSession._fromisoformat(item["startTime"])
+        print(f"All {len(results)} readings retreived")
+        return results
     def __enter__(self):
         """Context Manager Enter"""
         return self
@@ -271,6 +262,6 @@ class DCSSession:
             print(f"Got readings for {'VM' if isVirtual else 'R'}{id}, server response time: {reply.elapsed.total_seconds()}s")
         if iterator and IJSONAVAILABLE:
             # The user must ask for an iterator AND the module must be available
-            return _iterjson_reads(reply)
+            return DCSSession._iterjson_reads(reply)
         else:
-            return _json_reads(reply)
+            return DCSSession._json_reads(reply)

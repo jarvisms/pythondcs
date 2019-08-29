@@ -2,6 +2,16 @@
 # All features from the standard module will be inherited and added to
 from pythondcs import *
 
+def macint_to_hex(MacInt):
+    """Converts integers to hex MAC address"""
+    assert 0 <= MacInt <= 0xFFFFFFFFFFFF, "Integer out of range"
+    return ":".join([format(MacInt,"012X")[x:x+2] for x in range(0,12,2)])
+
+def machex_to_int(MacHex):
+    """Converts hex MAC address to integers"""
+    assert 12 <= len(MacHex) <= 17, "String of unexpected size"
+    return int(MacHex.replace(":","").lower(), 16)
+
 def get_meters_from_group(group, meters=[]):
     """
     Produces a flat list of meters from a possibly nested group.
@@ -172,9 +182,9 @@ class DCSSession(DCSSession):
         result = reply.json()["calibrationReadings"]
         # Convert the datetime strings to real datetime objects which are tz aware
         for item in result:
-            item["timestamp"] = _fromisoformat(
+            item["timestamp"] = DCSSession._fromisoformat(
                 item["timestamp"]).replace(tzinfo=timezone.utc)
-            item["startTime"] = _fromisoformat(
+            item["startTime"] = DCSSession._fromisoformat(
                 item["startTime"]).replace(tzinfo=timezone.utc)
         return result
     def get_meters_by_idc(self, macAddress):
