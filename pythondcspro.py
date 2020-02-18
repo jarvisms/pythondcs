@@ -227,6 +227,16 @@ class DCSSession(DCSSession):
                 )
         reply.raise_for_status()
         print("Registers Added Successfully")
+    def import_metereddata(self, filedata):
+        """Import metered data CSV format file with contents provided in filedata"""
+        subpath = "/registerReadings/import/"
+        with self.lock:
+            reply = self.s.post(self.rooturl+subpath,
+                json={ "dataImportPluginId":1, "data":filedata },
+                    timeout=self.timeout,
+                )
+        reply.raise_for_status()
+        print("Data Imported Successfully")
     def get_mega_readings(self, *args, maxwindow=timedelta(days=549),
         start=None, end=None, iterator=False, **kwargs):
         """Breaks up a potentially very large get_readings transaction into numerous
