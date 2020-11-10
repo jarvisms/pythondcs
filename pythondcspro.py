@@ -290,3 +290,25 @@ class DCSSession(DCSSession):
             for reading in self.get_readings(*args, iterator=iterator, **chunk, **kwargs))
         # Return this generator if an iterator was requested, else give a list
         return concat if iterator else list(concat)
+    def get_users(self, id=None):
+        """Get a detailed list of all users configured on the server
+        or the one specified by id (a UUID like string)"""
+        subpath = "/users/"
+        id = str(id) if id is not None else ""
+        with self.lock:
+            reply = self.s.get(self.rooturl+subpath+id,
+                timeout=self.timeout)
+        reply.raise_for_status()
+        return reply.json()
+    def update_user(self, user):
+        """Updates a user defined by the 'user' dictionary with
+        the parameters within. A read-modify-write process is advised.
+        Returns the user details (like an element from get_users)
+        although the DCS server appears to send the old details
+        and not confirmation of the new details."""
+        subpath = "/users/"
+        with self.lock:
+            reply = self.s.put(self.rooturl+subpath, json=user,
+                timeout=self.timeout)
+        reply.raise_for_status()
+        return reply.json()
