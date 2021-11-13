@@ -78,7 +78,7 @@ class DCSSession:
     def _iterjson_reads(reply):
         """Takes the http response and decodes the json payload by streaming it,
         decompressing it if required, and decoding it into an ijson iterator as
-        elements are consumed. Convert timestapms to datetime objects and ensure
+        elements are consumed. Convert timestamps to datetime objects and ensure
         all Decimals are converted back to native floats"""
         # Prepare to decompress on the fly if required
         if reply.headers["content-encoding"] in ("gzip", "deflate"):
@@ -86,13 +86,9 @@ class DCSSession:
         else:
             raw = reply.raw
         n=0
-        for item in ijson.items(raw, 'item'):
+        for item in ijson.items(raw, 'item', use_float=True):
             # Convert to datetimes and floats where needed
             item["startTime"] = DCSSession._fromisoformat(item["startTime"])
-            if type(item["totalValue"]) == ijson.common.decimal.Decimal:
-                item["totalValue"] = float(item["totalValue"])
-            if type(item["periodValue"]) == ijson.common.decimal.Decimal:
-                item["periodValue"] = float(item["periodValue"])
             yield item  # Yield each item one at a time
             n+=1
         print(f"All {n} readings retreived")
@@ -247,11 +243,11 @@ class DCSSession:
             subpath = "/registerReadings/list/"
             dataparams["registerId"] = int(id)
         # Convert to ISO strings assuming datetimes or dates were given
-        if type(dataparams["start"]) in (datetime, date):
+        if isinstance(dataparams["start"], date):
             dataparams["start"] = dataparams["start"].isoformat()
         elif dataparams["start"] is None:
             dataparams["start"] = date.today().isoformat()
-        if type(dataparams["end"]) in (datetime, date):
+        if isinstance(dataparams["end"], date):
             dataparams["end"] = dataparams["end"].isoformat()
         # Actually get the data and stream it into the json iterative decoder
         with self.lock:
