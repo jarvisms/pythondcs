@@ -261,3 +261,249 @@ class DCSSession:
             return DCSSession._iterjson_reads(reply)
         else:
             return DCSSession._json_reads(reply)
+
+
+class PublicAPISession:
+    """
+    https://github.com/coherent-research/dcs-documentation/blob/master/DcsPublicApiDescription.md
+    """
+    if hasattr(datetime,"fromisoformat"):
+        @staticmethod
+        def _fromisoformat(isostr):
+            """Converts ISO formatted datetime strings to datetime objects
+            using built in methods but with added support for "Z" timezones.
+            Generally supported by Python 3.7+"""
+            return datetime.fromisoformat(isostr.replace('Z', '+00:00', 1))
+    else:
+        @staticmethod
+        def _fromisoformat(isostr):
+            """Converts ISO formatted datetime strings to datetime objects
+            using string manipulations for Python 3.6 and lower where the built in
+            "fromisoformat" method isn't available. This function is slower but
+            much faster than "strptime", but not as forgiving if the strings are
+            incorrectly formatted.
+            Expected format: YYYY*MM*DD*HH*MM*SS[.f][Z|[{+|-}HH*MM]] where * can
+            match any single character, and "f" can be up to 6 digits"""
+            isostr = isostr.replace('Z', '+00:00', 1)
+            strlen = len(isostr)
+            tz_pos = (isostr.find("+",19)+1 or isostr.find("-",19)+1 or strlen+1)-1
+            if tz_pos == strlen:
+                tz = None
+            else:
+                tz_parts = (
+                    int(isostr[tz_pos+1:tz_pos+3]),
+                    int(isostr[tz_pos+4:tz_pos+6]),
+                )
+                if not any(tz_parts):
+                    tz = timezone.utc
+                else:
+                    tz = timezone(
+                        (1 if isostr[tz_pos] == "+" else -1)
+                        * timedelta(
+                            hours=tz_parts[0],
+                            minutes=tz_parts[1],
+                        )
+                    )
+            return datetime(
+                int(isostr[0:4]),   # Year
+                int(isostr[5:7]),   # Month
+                int(isostr[8:10]),  # Day
+                int(isostr[11:13]), # Hour
+                int(isostr[14:16]), # Minute
+                int(isostr[17:19]), # Second
+                (
+                    int(isostr[20:tz_pos].ljust(6,"0"))
+                    if strlen > 19 and isostr[19] == "."
+                    else 0
+                ),  # Microsecond
+                tz, # Timezone
+            )
+    @classmethod
+    def _readingsgenerator(cls, parse_events):
+        """Provides an iterator of element from the 'readings' object.
+        Converts timestamps to datetime objects and values to floats"""
+        n=0
+        for item in ijson.items(parse_events,"readings.item", use_float=True):
+            item["timestamp"] = cls._fromisoformat(item["timestamp"])
+            item["value"] = float(item["value"])
+            yield item
+            n+=1
+        print(f"All {n} readings retreived")
+    @classmethod
+    def _iterjson_reads(cls, reply):
+        """Takes the http response and decodes the json payload by streaming it,
+        decompressing it if required, and decoding it into a dictionary with an
+        iterator in place of the 'readings' object with elements yielded as they
+        are consumed. Converts all timestamps to datetime objects, and reading
+        values to floats.
+
+        Note that any items appearing after the 'readings' object will be lost."""
+        if "content-encoding" in reply.headers and reply.headers["content-encoding"] in ("gzip", "deflate"):
+            raw = gzip.open(reply.raw)
+        else:
+            raw = reply.raw
+        results = dict()
+        parse_events = ijson.parse(raw)
+        while True:
+            path, name, value = next(parse_events)
+            if name == "map_key" and value != "readings":
+                path, name, value = next(parse_events)
+                results[path] = cls._fromisoformat(value) if path in ("startTime", "endTime") else value
+            elif name == "map_key" and value == "readings":
+                break
+        results["readings"] = cls._readingsgenerator(parse_events)
+        return results
+    @classmethod
+    def _json_reads(cls, reply):
+        """Takes the http response and decodes the json payload as one object
+        converting timestamps to datetime objects and all readng values to floats"""
+        results = reply.json()
+        results["startTime"] = cls._fromisoformat(results["startTime"])
+        results["endTime"] = cls._fromisoformat(results["endTime"])
+        for item in results["readings"]:
+            # Convert to datetimes
+            item["timestamp"] = cls._fromisoformat(item["timestamp"])
+            item["value"] = float(item["value"])
+        print(f"All {len(results['readings'])} readings retreived")
+        return results
+    def __enter__(self):
+        """Context Manager Enter"""
+        return self
+    def __exit__(self, exc_type, exc_value, traceback):
+        """Context Manager Exit"""
+        return None
+    def __init__(self, rooturl, username=None, password=None):
+        """
+        Creates a Public API Session object with the rooturl and logs in if
+        credentials are provided. Returns this object for future use.
+        """
+        # Lock used to limit sessions to 1 transaction at a time to avoid
+        # accidental flooding of the server if used within multithreaded loops
+        self.lock = RLock()
+        self.timeout = (3.05,120)   # Connect and Read timeouts
+        self.s = requests.Session()
+        self.s.stream = True
+        # Attempt up to 5 increasingly delayed retries for recoverable errors
+        self.s.mount(rooturl, HTTPAdapter(
+            max_retries=Retry(  # Delays between retries: 0, 1, 2, 4, 8 seconds
+                total=5, backoff_factor=0.5, status_forcelist=[ 502, 503, 504 ]
+            ) ))
+        self.rooturl = rooturl + "/dcswebapi"
+        self.username = None
+        self.role = None
+        if None not in (username, password):
+            self.signin(username, password)
+        else:
+            print("Incomplete credentials given; Please use the signin method")
+    def status(self):
+        """
+        Gets the Status of the API
+        """
+        subpath = "/status"
+        with self.lock:
+            reply = self.s.get(self.rooturl+subpath, timeout=self.timeout)
+        reply.raise_for_status()
+        return reply.json()
+    def signin(self, username, password):
+        """
+        https://github.com/coherent-research/dcs-documentation/blob/master/DcsPublicApiDescription.md#authenticated-mode
+        """
+        subpath = "/authentication/signin"
+        if len(self.s.cookies) > 0 or self.username is not None:
+            self.signout()
+        try:
+            with self.lock:
+                reply = self.s.post(self.rooturl+subpath,
+                    json={"username":username,"password":password},
+                    timeout=self.timeout
+                    )
+            reply.raise_for_status()
+            result = reply.json()
+            self.username = result['username']
+            self.role = result['role']
+            print(f"Successfully signed in to DCS as '{self.username}' with {self.role} privileges")
+        except requests.exceptions.HTTPError as err:
+            r = err.response
+            print(f"{r.status_code}: {r.reason}, '{r.text}'\n{r.url}")
+    def signout(self):
+        """Signs out of the current session."""
+        subpath = "/authentication/signout"
+        with self.lock:
+            self.s.post(self.rooturl+subpath, timeout=self.timeout)
+        self.username = None
+        self.role = None
+        print("Signed Out of DCS")
+    def __del__(self):
+        """Signs out of DCS upon deletion and garbage collection of this object"""
+        if self.username is not None:#
+            self.signout()
+    def get_meters(self, iterator=False):
+        """
+        https://github.com/coherent-research/dcs-documentation/blob/master/DcsPublicApiDescription.md#get-meters
+        """
+        subpath = "/meters"
+        with self.lock:
+            reply = self.s.get(self.rooturl+subpath, timeout=self.timeout)
+        reply.raise_for_status()
+        if iterator and IJSONAVAILABLE:
+            # The user must ask for an iterator AND the module must be available
+            if "content-encoding" in reply.headers and reply.headers["content-encoding"] in ("gzip", "deflate"):
+                raw = gzip.open(reply.raw)
+            else:
+                raw = reply.raw
+            return ijson.items(raw,"item", use_float=True)
+        else:
+            return reply.json()
+    def get_vms(self, iterator=False):
+        """
+        https://github.com/coherent-research/dcs-documentation/blob/master/DcsPublicApiDescription.md#get-virtual-meters
+        """
+        subpath = "/virtualMeters/"
+        with self.lock:
+            reply = self.s.get(self.rooturl+subpath, timeout=self.timeout)
+        reply.raise_for_status()
+        if iterator and IJSONAVAILABLE:
+            # The user must ask for an iterator AND the module must be available
+            if "content-encoding" in reply.headers and reply.headers["content-encoding"] in ("gzip", "deflate"):
+                raw = gzip.open(reply.raw)
+            else:
+                raw = reply.raw
+            return ijson.items(raw,"item", use_float=True)
+        else:
+            return reply.json()
+    def get_readings(self, id, startTime=None, endTime=None, periodCount=None,
+        calibrated=True, interpolated=True, format="standard", periodType="halfhour",
+        iterator=False):
+        """
+        https://github.com/coherent-research/dcs-documentation/blob/master/DcsPublicApiDescription.md#get-metered-data
+        """
+        if (startTime,endTime,periodCount).count(None) != 1:
+            raise TypeError("Only two parameters are permitted from startTime, endTime, periodCount")
+        dataparams = {
+            'id'                : id,
+            'format'            : format, # Currently only "standard" is supported
+            'startTime'         : startTime,  # if None, it wont get arsed to the url
+            'endTime'           : endTime,  # If None, it wont get parsed to the url
+            'periodCount'       : periodCount, # If None, it wont get parsed to the url
+            'calibrated'        : calibrated,
+            'interpolated'      : interpolated,
+            'periodType'        : periodType,  # Enum: "halfHour" "hour" "day" "week" "month"
+        }
+        subpath = "/readings"
+        # Convert to ISO strings assuming datetimes or dates were given
+        if isinstance(dataparams["startTime"], date):
+            dataparams["startTime"] = dataparams["startTime"].astimezone(timezone.utc).isoformat().replace("+00:00", "Z", 1)
+        if isinstance(dataparams["endTime"], date):
+            dataparams["endTime"] = dataparams["endTime"].astimezone(timezone.utc).isoformat().replace("+00:00", "Z", 1)
+        # Actually get the data and stream it into the json iterative decoder
+        with self.lock:
+            # Stream the response into json decoder for efficiency
+            reply = self.s.get(self.rooturl+subpath, params=dataparams,
+                timeout=self.timeout)
+            reply.raise_for_status()    # Raise exception if not 2xx status
+        print(f"Got readings for {id}, server response time: {reply.elapsed.total_seconds()}s")
+        if iterator and IJSONAVAILABLE:
+            # The user must ask for an iterator AND the module must be available
+            return self._iterjson_reads(reply)
+        else:
+            return self._json_reads(reply)
