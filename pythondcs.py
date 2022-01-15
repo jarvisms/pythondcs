@@ -441,7 +441,7 @@ class PublicAPISession:
         """
         https://github.com/coherent-research/dcs-documentation/blob/master/DcsPublicApiDescription.md#get-meters
         """
-        subpath = "/meters"
+        subpath = "/public/meters" if self.username is None else "/meters"
         with self.lock:
             reply = self.s.get(self.rooturl+subpath, timeout=self.timeout)
         reply.raise_for_status()
@@ -458,7 +458,7 @@ class PublicAPISession:
         """
         https://github.com/coherent-research/dcs-documentation/blob/master/DcsPublicApiDescription.md#get-virtual-meters
         """
-        subpath = "/virtualMeters/"
+        subpath = "/public/virtualMeters" if self.username is None else "/virtualMeters"
         with self.lock:
             reply = self.s.get(self.rooturl+subpath, timeout=self.timeout)
         reply.raise_for_status()
@@ -489,7 +489,7 @@ class PublicAPISession:
             'interpolated'      : interpolated,
             'periodType'        : periodType,  # Enum: "halfHour" "hour" "day" "week" "month"
         }
-        subpath = "/readings"
+        subpath = "/public/readings" if self.username is None else "/readings"
         # Convert to ISO strings assuming datetimes or dates were given
         if isinstance(dataparams["startTime"], date):
             dataparams["startTime"] = dataparams["startTime"].astimezone(timezone.utc).isoformat().replace("+00:00", "Z", 1)
