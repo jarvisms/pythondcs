@@ -366,6 +366,19 @@ class PublicAPISession:
             item["value"] = float(item["value"])
         print(f"All {len(results['readings'])} readings retreived")
         return results
+    @classmethod
+    def _raise_for_status(cls, reply):
+        """Raises :class:`HTTPError`, if one occurred with the human readable error message included"""
+        if 400 <= reply.status_code < 500:
+            http_error_msg = f"\n{reply.status_code} Client Error: {reply.reason} for url: {reply.url}"
+            try:
+                payload = reply.json()
+                http_error_msg += f"\n{ chr(10).join( ' : '.join(item) for item in payload.items() ) }"
+            except requests.models.complexjson.JSONDecodeError:
+                pass
+            raise requests.exceptions.HTTPError(http_error_msg, response=reply)
+        else:
+            reply.raise_for_status()    # Fallback on the requests library exception
     def __enter__(self):
         """Context Manager Enter"""
         return self
@@ -388,13 +401,13 @@ class PublicAPISession:
             max_retries=Retry(  # Delays between retries: 0, 1, 2, 4, 8 seconds
                 total=5, backoff_factor=0.5, status_forcelist=[ 502, 503, 504 ]
             ) ))
-        self.rooturl = rooturl + "/dcswebapi"
+        self.rooturl = rooturl.rstrip(" /")
         self.username = None
         self.role = None
         if None not in (username, password):
             self.signin(username, password)
         else:
-            print("Incomplete credentials given; Please use the signin method")
+            print("Incomplete credentials given - Unauthenticated mode will be used; Please use the signin method for Authenticated mode")
     def status(self):
         """
         Gets the Status of the API
@@ -402,7 +415,7 @@ class PublicAPISession:
         subpath = "/status"
         with self.lock:
             reply = self.s.get(self.rooturl+subpath, timeout=self.timeout)
-        reply.raise_for_status()
+        self._raise_for_status(reply)
         return reply.json()
     def signin(self, username, password):
         """
@@ -417,7 +430,7 @@ class PublicAPISession:
                     json={"username":username,"password":password},
                     timeout=self.timeout
                     )
-            reply.raise_for_status()
+            self._raise_for_status(reply)
             result = reply.json()
             self.username = result['username']
             self.role = result['role']
@@ -444,7 +457,7 @@ class PublicAPISession:
         subpath = "/public/meters" if self.username is None else "/meters"
         with self.lock:
             reply = self.s.get(self.rooturl+subpath, timeout=self.timeout)
-        reply.raise_for_status()
+        self._raise_for_status(reply)
         if iterator and IJSONAVAILABLE:
             # The user must ask for an iterator AND the module must be available
             if "content-encoding" in reply.headers and reply.headers["content-encoding"] in ("gzip", "deflate"):
@@ -461,7 +474,7 @@ class PublicAPISession:
         subpath = "/public/virtualMeters" if self.username is None else "/virtualMeters"
         with self.lock:
             reply = self.s.get(self.rooturl+subpath, timeout=self.timeout)
-        reply.raise_for_status()
+        self._raise_for_status(reply)
         if iterator and IJSONAVAILABLE:
             # The user must ask for an iterator AND the module must be available
             if "content-encoding" in reply.headers and reply.headers["content-encoding"] in ("gzip", "deflate"):
@@ -491,16 +504,20 @@ class PublicAPISession:
         }
         subpath = "/public/readings" if self.username is None else "/readings"
         # Convert to ISO strings assuming datetimes or dates were given
-        if isinstance(dataparams["startTime"], date):
+        if isinstance(dataparams["startTime"], datetime):
             dataparams["startTime"] = dataparams["startTime"].astimezone(timezone.utc).isoformat().replace("+00:00", "Z", 1)
-        if isinstance(dataparams["endTime"], date):
+        elif isinstance(dataparams["startTime"], date):
+            dataparams["startTime"] = dataparams["startTime"].isoformat() + "T00:00:00Z"
+        if isinstance(dataparams["endTime"], datetime):
             dataparams["endTime"] = dataparams["endTime"].astimezone(timezone.utc).isoformat().replace("+00:00", "Z", 1)
+        elif isinstance(dataparams["endTime"], date):
+            dataparams["endTime"] = dataparams["endTime"].isoformat() + "T00:00:00Z"
         # Actually get the data and stream it into the json iterative decoder
         with self.lock:
             # Stream the response into json decoder for efficiency
             reply = self.s.get(self.rooturl+subpath, params=dataparams,
                 timeout=self.timeout)
-            reply.raise_for_status()    # Raise exception if not 2xx status
+        self._raise_for_status(reply)
         print(f"Got readings for {id}, server response time: {reply.elapsed.total_seconds()}s")
         if iterator and IJSONAVAILABLE:
             # The user must ask for an iterator AND the module must be available
