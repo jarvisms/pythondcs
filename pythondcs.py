@@ -524,3 +524,133 @@ class PublicAPISession:
             return self._iterjson_reads(reply)
         else:
             return self._json_reads(reply)
+
+        def get_mega_readings(self, *args, maxwindow=timedelta(days=365),
+            startTime=None, endTime=None, iterator=False, periodType="halfHour", **kwargs):
+            """Breaks up a potentially very large get_readings transaction into numerous
+            smaller ones based on a maxwindow size (a timedelta defaulting to about 12
+            months) and provides the result as if one single transaction was completed;
+            either a very large list of readings or a single iterator over all readings
+            from all constituent underlying transactions. Aside from maxwindow, all
+            arguments are as per get_readings and are passed through"""
+            periodTimedelta = {
+                    "halfhour"  : timedelta(minutes=30),
+                    "hour"      : timedelta(hours=1),
+                    "day"       : timedelta(days=1),
+                    "week"      : timedelta(days=7),
+                    "month"     : timedelta(days=31),
+                }
+            periodType = periodType.lower()
+            ptd = periodTimedelta[periodType]
+            if maxwindow < ptd:
+                raise TypeError("Max window is smaller than the periodType")
+            if None in (startTime, endTime):
+                raise TypeError("You must explicitly provide a startTime and endTime if you want batching")
+            if isinstance(startTime, date):
+                startTime = datetime.combine(startTime, time(), timezone.utc)
+            elif isinstance(startTime, datetime):
+                startTime = startTime.astimezone(timezone.utc)
+            else:
+                raise TypeError("The startTime isn't a 'date' or 'datetime' instance")
+            if isinstance(endTime, date):
+                endTime = datetime.combine(endTime, time(), timezone.utc)
+            elif isinstance(endTime, datetime):
+                endTime = endTime.astimezone(timezone.utc)
+            else:
+                raise TypeError("The endTime isn't a 'date' or 'datetime' instance")
+            if endTime < startTime: # Swap dates if reversed
+                startTime, endTime = endTime, startTime
+            if startTime == endTime:
+                raise TypeError("The startTime and endTime are the same")
+            elif (
+                (periodType == "halfhour" and not ( # Check its a clean half hour
+                endTime.microsecond == endTime.second == startTime.microsecond == startTime.second == 0 and
+                startTime.minute in (0,30) and endTime.minute in (0,30)
+                )) or
+                (periodType == "hour" and not ( # Check its a clean hour
+                endTime.microsecond == endTime.second == endTime.minute == startTime.microsecond == startTime.second == startTime.minute == 0
+                )) or
+                (periodType == "day" and not ( # Check its a clean day
+                endTime.microsecond == endTime.second == endTime.minute == endTime.hour == startTime.microsecond == startTime.second == startTime.minute == startTime.hour == 0
+                )) or
+                (periodType == "week" and not ( # Check its a clean week starting on Monday and ending on Sunday
+                endTime.microsecond == endTime.second == endTime.minute == endTime.hour == startTime.microsecond == startTime.second == startTime.minute == startTime.hour == 0 and
+                (startTime.weekday(), endTime.weekday()) == (0,6)
+                )) or
+                (periodType == "month" and not ( # Check its a clean month starting on the 1st and ending on whatever the last day of the month is for that month and year
+                endTime.microsecond == endTime.second == endTime.minute == endTime.hour == startTime.microsecond == startTime.second == startTime.minute == startTime.hour == 0 and
+                startTime.day == 1 and endTime.day == ((endTime.replace(month=endTime.month+1, day=1) if endTime.month < 12 else endTime.replace(year=endTime.year+1, month=1, day=1)) - timedelta(days=1)).day
+                )) ):
+                raise TypeError("The startTime and endTime must be aligned with the periodType")
+            maxwindow=abs(maxwindow)  # Strip negative durations and dont go too small
+            if maxwindow < timedelta(days=1):
+                maxwindow = timedelta(days=1)
+            reqwindow = endTime - startTime # Requested window/duration
+            print(f"{reqwindow} requested and the maximum limit is {maxwindow}")
+            if reqwindow <= maxwindow: # If the period is smaller than max, use directly
+                print("Only 1 transaction is needed")
+                return self.get_readings(*args, startTime=startTime, endTime=endTime, periodType=periodType, iterator=iterator, **kwargs)
+            else:   # If the period is larger than max, then break it down
+                if periodType == "month":
+                    reqperiods = (endTime.year-startTime.year)*12 + (endTime.month-startTime.month) + 1 # Requested duration counted in months
+                else:
+                    reqperiods = reqwindow // ptd # Requested duration in periods
+                maxperiods = maxwindow // ptd # Maximum duration in periods
+                d = 2   # Start by dividing into 2 intervals, since 1 was tested above
+                while True:
+                    # Divide into incrementally more/smaller peices and check
+                    i, r = divmod(reqperiods, d)
+                    # Once the peices are small enough, stop.
+                    # If there is no remainder, take i, otherwise the remainders will
+                    # be added to other peices so add 1 and check that instead.
+                    if (i+1 if r else i) <= maxperiods: break
+                    d += 1
+                # Make a list of HH sample sizes, with the remainders added onto the
+                # first sets. Such as 11, 11, 10 for a total of 32.
+                periodsBlocks = [i+1]*r + [i]*(d-r)
+                print(f"{len(periodsBlocks)} transactions will be used")
+                Intervals=[]
+                IntervalStart = startTime   # The first starttime is the original start
+                if periodType == "month":
+                    for i in periodsBlocks:
+                        # Add calculated number of half hours on to the start time
+                        IntervalEnd = IntervalStart + i * ptd
+                        IntervalEnd = IntervalEnd.replace(day=1) - timedelta(days=1)
+                        # Define each sample window  and start the next one after the last
+                        Intervals.append({"startTime":IntervalStart,"endTime":IntervalEnd})
+                        IntervalStart = IntervalEnd + timedelta(days=1)
+                else:
+                    for i in periodsBlocks:
+                        # Add calculated number of half hours on to the start time
+                        IntervalEnd = IntervalStart + i * ptd
+                        # Define each sample window  and start the next one after the last
+                        Intervals.append({"startTime":IntervalStart,"endTime":IntervalEnd})
+                        IntervalStart = IntervalEnd
+            if iterator:
+                result = {
+                    "startTime" : Intervals[0]["startTime"],
+                    "endTime"   : Intervals[-1]["endTime"],
+                    }
+                iterresults = ( self.get_readings(*args, periodType=periodType, iterator=iterator, **chunk, **kwargs) for chunk in Intervals )
+                firstchunk = next(iterresults)
+                for item in firstchunk:
+                    if item not in ("startTime", "endTime", "readings"):
+                        result[item] = firstchunk[item]
+                    elif item == "readings":
+                        def concatreadings(firstone, otherones):
+                            yield from firstone["readings"]
+                            for chunk in iterresults:
+                                yield from chunk["readings"]
+                        result["readings"] = concatreadings(firstchunk,iterresults)
+                return result
+            else:
+                # Gather results
+                result = {"readings":[]}
+                for chunk in Intervals:
+                    chunkresult = self.get_readings(*args, periodType=periodType, iterator=iterator, **chunk, **kwargs)
+                    for item in chunkresult:
+                        if item not in result or item == "endTime":
+                            result[item] = chunkresult[item]
+                        elif item == "readings":
+                            result["readings"].extend(chunkresult["readings"])
+                return result
