@@ -1,6 +1,6 @@
 from datetime import datetime, date, time, timedelta, timezone
 from threading import RLock
-import requests
+import requests, logging
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 
@@ -91,7 +91,7 @@ class DCSSession:
             item["startTime"] = DCSSession._fromisoformat(item["startTime"])
             yield item  # Yield each item one at a time
             n+=1
-        print(f"All {n} readings retreived")
+        logging.info(f"All {n} readings retreived")
     @staticmethod
     def _json_reads(reply):
         """Takes the http response and decodes the json payload as one object
@@ -100,7 +100,7 @@ class DCSSession:
         for item in results:
             # Convert to datetimes
             item["startTime"] = DCSSession._fromisoformat(item["startTime"])
-        print(f"All {len(results)} readings retreived")
+        logging.info(f"All {len(results)} readings retreived")
         return results
     def __enter__(self):
         """Context Manager Enter"""
@@ -130,7 +130,7 @@ class DCSSession:
         if None not in (username, password):
             self.login(username, password)
         else:
-            print("Incomplete credentials given; Please use the login method")
+            logging.warning("Incomplete credentials given; Please use the login method")
     def login(self, username, password):
         """
         Logs in to DCS server and returns a logged in session for future use.
@@ -151,10 +151,10 @@ class DCSSession:
             result = reply.json()
             self.username = result['username']
             self.role = result['role']
-            print(f"Successfully logged in to DCS as '{self.username}' with {self.role} privileges")
+            logging.info(f"Successfully logged in to DCS as '{self.username}' with {self.role} privileges")
         except requests.exceptions.HTTPError as err:
             r = err.response
-            print(f"{r.status_code}: {r.reason}, '{r.text}'\n{r.url}")
+            logging.error(f"{r.status_code}: {r.reason}, '{r.text}'\n{r.url}")
         self.s = s
     def logout(self):
         """Logs out of the current DCS session."""
@@ -163,7 +163,7 @@ class DCSSession:
             self.s.post(self.rooturl+subpath, timeout=self.timeout)
         self.username = None
         self.role = None
-        print("Logged Out of DCS")
+        logging.info("Logged Out of DCS")
     def __del__(self):
         """Logs out of DCS upon deletion and garbage collection of this object"""
         if self.username is not None:
@@ -255,7 +255,7 @@ class DCSSession:
             reply = self.s.get(self.rooturl+subpath, params=dataparams,
                 timeout=self.timeout)
             reply.raise_for_status()    # Raise exception if not 2xx status
-            print(f"Got readings for {'VM' if isVirtual else 'R'}{id}, server response time: {reply.elapsed.total_seconds()}s")
+            logging.info(f"Got readings for {'VM' if isVirtual else 'R'}{id}, server response time: {reply.elapsed.total_seconds()}s")
         if iterator and IJSONAVAILABLE:
             # The user must ask for an iterator AND the module must be available
             return DCSSession._iterjson_reads(reply)
@@ -339,7 +339,7 @@ class DcsWebApi:
             item["value"] = float(item["value"])
             yield item
             n+=1
-        print(f"All {n} readings retreived")
+        logging.info(f"All {n} readings retreived")
     @classmethod
     def _iterjson_reads(cls, reply):
         """Takes the http response and decodes the json payload by streaming it,
@@ -373,7 +373,7 @@ class DcsWebApi:
             # Convert to datetimes
             item["timestamp"] = cls._fromisoformat(item["timestamp"])
             item["value"] = float(item["value"])
-        print(f"All {len(results['readings'])} readings retreived")
+        logging.info(f"All {len(results['readings'])} readings retreived")
         return results
     @classmethod
     def _raise_for_status(cls, reply):
@@ -416,7 +416,7 @@ class DcsWebApi:
         if None not in (username, password):
             self.signin(username, password)
         else:
-            print("Incomplete credentials given - Unauthenticated mode will be used; Please use the signin method for Authenticated mode")
+            logging.warning("Incomplete credentials given - Unauthenticated mode will be used; Please use the signin method for Authenticated mode")
     def status(self):
         """
         Gets the Status of the API
@@ -446,10 +446,10 @@ class DcsWebApi:
             result = reply.json()
             self.username = result['username']
             self.role = result['role']
-            print(f"Successfully signed in to DCS as '{self.username}' with {self.role} privileges")
+            logging.info(f"Successfully signed in to DCS as '{self.username}' with {self.role} privileges")
         except requests.exceptions.HTTPError as err:
             r = err.response
-            print(f"{r.status_code}: {r.reason}, '{r.text}'\n{r.url}")
+            logging.error(f"{r.status_code}: {r.reason}, '{r.text}'\n{r.url}")
     def signout(self):
         """
         Signs out of the current session and expires the authentication cookie.
@@ -460,7 +460,7 @@ class DcsWebApi:
             self.s.post(self.rooturl+subpath, timeout=self.timeout)
         self.username = None
         self.role = None
-        print("Signed Out of DCS")
+        logging.info("Signed Out of DCS")
     def __del__(self):
         """Signs out of DCS upon deletion and garbage collection of this object"""
         if self.username is not None:#
@@ -569,7 +569,7 @@ class DcsWebApi:
             reply = self.s.get(self.rooturl+subpath, params=dataparams,
                 timeout=self.timeout)
         self._raise_for_status(reply)
-        print(f"Got readings for {id}, server response time: {reply.elapsed.total_seconds()}s")
+        logging.info(f"Got readings for {id}, server response time: {reply.elapsed.total_seconds()}s")
         if iterator and IJSONAVAILABLE:
             # The user must ask for an iterator AND the module must be available
             return self._iterjson_reads(reply)
@@ -655,9 +655,9 @@ class DcsWebApi:
         if maxwindow < timedelta(days=1):
             maxwindow = timedelta(days=1)
         reqwindow = endTime - startTime # Requested window/duration
-        print(f"{reqwindow} requested and the maximum limit is {maxwindow}")
+        logging.info(f"{reqwindow} requested and the maximum limit is {maxwindow}")
         if reqwindow <= maxwindow: # If the period is smaller than max, use directly
-            print("Only 1 transaction is needed")
+            logging.info("Only 1 transaction is needed")
             return self.readings(*args, startTime=startTime, endTime=endTime, periodType=periodType, iterator=iterator, **kwargs)
         else:   # If the period is larger than max, then break it down
             if periodType == "month":
@@ -677,7 +677,7 @@ class DcsWebApi:
             # Make a list of HH sample sizes, with the remainders added onto the
             # first sets. Such as 11, 11, 10 for a total of 32.
             periodsBlocks = [i+1]*r + [i]*(d-r)
-            print(f"{len(periodsBlocks)} transactions will be used")
+            logging.info(f"{len(periodsBlocks)} transactions will be used")
             Intervals=[]
             IntervalStart = startTime   # The first starttime is the original start
             if periodType == "month":

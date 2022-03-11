@@ -133,7 +133,7 @@ class DCSSession(DCSSession):
             reply = self.s.delete(self.rooturl+subpath+str(int(id)),
                 timeout=self.timeout)
         reply.raise_for_status()
-        print("Modbus Device Deleted Successfully")
+        logging.info("Modbus Device Deleted Successfully")
     def get_meter_tree(self,id=0,recursively=True,groupsOnly=False,withoutRegister=False):
         """Gets potentially all Meter Groups ("Folders"), Meter, Registers, and
         Virtual Meters in the various sub-groups.
@@ -226,7 +226,7 @@ class DCSSession(DCSSession):
                     timeout=self.timeout,
                 )
         reply.raise_for_status()
-        print("Registers Added Successfully")
+        logging.info("Registers Added Successfully")
     def import_metereddata(self, filedata):
         """Import metered data CSV format file with contents provided in filedata"""
         subpath = "/registerReadings/import/"
@@ -236,7 +236,7 @@ class DCSSession(DCSSession):
                     timeout=self.timeout,
                 )
         reply.raise_for_status()
-        print("Data Imported Successfully")
+        logging.info("Data Imported Successfully")
     def get_mega_readings(self, *args, maxwindow=timedelta(days=549),
         start=None, end=None, iterator=False, **kwargs):
         """Breaks up a potentially very large get_readings transaction into numerous
@@ -257,9 +257,9 @@ class DCSSession(DCSSession):
         if maxwindow < timedelta(days=1):
             maxwindow = timedelta(days=1)
         reqwindow = end - start # Requested window/duration
-        print(f"{reqwindow} requested and the maximum limit is {maxwindow}")
+        logging.info(f"{reqwindow} requested and the maximum limit is {maxwindow}")
         if reqwindow <= maxwindow: # If the period is smaller than max, use directly
-            print("Only 1 transaction is needed")
+            logging.info("Only 1 transaction is needed")
             return self.get_readings(*args, start=start, end=end, iterator=iterator, **kwargs)
         else:   # If the period is larger than max, then break it down
             reqHHs = reqwindow // timedelta(minutes=30) # Requested duration in HalfHours
@@ -276,7 +276,7 @@ class DCSSession(DCSSession):
             # Make a list of HH sample sizes, with the remainders added onto the
             # first sets. Such as 11, 11, 10 for a total of 32.
             HHBlocks = [i+1]*r + [i]*(d-r)
-            print(f"{len(HHBlocks)} transactions will be used")
+            logging.info(f"{len(HHBlocks)} transactions will be used")
             Intervals=[]
             IntervalStart = start   # The first starttime is the original start
             for i in HHBlocks:
