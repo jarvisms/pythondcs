@@ -1,6 +1,6 @@
 # pythondcs
 
-The pythondcs module provides a convenient way to allow a Python application to access data within a [Coherent Research](http://coherent-research.co.uk/) DCS v3+ remote metering server via the DCS Web API. This may be to download meter reading data to validate invoices, big data analytics, or simply to dump into a file for consumption by some other system. Whatever the purpose, this module handles the link to DCS and returns data in standard Python data types, including those found within the standard [datetime](https://docs.python.org/3/library/datetime.html) library.
+The pythondcs module provides a convenient way to allow a Python application to access data within a [Coherent Research](http://www.coherent-research.co.uk/) DCS v3+ remote metering server via the DCS Web API. This may be to download meter reading data to validate invoices, big data analytics, or simply to dump into a file for consumption by some other system. Whatever the purpose, this module handles the link to DCS and returns data in standard Python data types, including those found within the standard [datetime](https://docs.python.org/3/library/datetime.html) library.
 
 ## Getting Started
 
@@ -12,11 +12,11 @@ You must of course have access to a Coherent DCS server system and have a valid 
 
 The only external module required is the [`python-requests`](http://docs.python-requests.org/) library. If installing `pyhondcs` via pip, this will be installed for you.
 
-For efficient handling of larger data sets, you can optionally use the [`ijson`](https://github.com/isagalaev/ijson) library which is recommended if you envisage accessing large amounts of data in each transaction (such as years of halfhourly data at a time) as this will provide memory efficient iterators instead of lists. However, you may choose to omit the `ijson` module if you wish if you only plan to grab small amounts of data in each transaction, or if you don't mind the memory burden of very large lists with nested dictionaries. The `ijson` module is also availble via pip.
+For efficient handling of larger data sets, you can optionally use the [`ijson`](https://github.com/isagalaev/ijson) library which is recommended if you envisage accessing large amounts of data in each transaction (such as years of halfhourly data at a time) as this will provide memory efficient iterators instead of lists. However, you may choose to omit the `ijson` module if you wish if you only plan to grab small amounts of data in each transaction, or if you don't mind the memory burden of very large lists with nested dictionaries. The `ijson` module is also available via pip.
 
 ### Installing
 
-The `pythondcs` package is available via pip, which will also install the `requests` prerequisite for you if you do not already have this. As mentioned above, `ijson` can optionally be used and is recomended.
+The `pythondcs` package is available via pip, which will also install the `requests` prerequisite for you if you do not already have this. As mentioned above, `ijson` can optionally be used and is recommended.
 
 At a command line (not in python), such as Windows cmd, or Linux/Mac shell/terminal:
 
@@ -58,17 +58,17 @@ dcs = pythondcs.DcsWebApi("https://url-of-dcs-web-api/")
 dcs.signin("myUsername", "MySuperSecurePassword")
 ```
 
-If you don't provide credentials, the session object can be used in un-authenticated mode if your server allows. In this mode, only data that is publicically accessible can be accessed.
+If you don't provide credentials, the session object can be used in un-authenticated mode if your server allows. In this mode, only data that is publicly accessible can be accessed.
 
 If your authentication cookie expires, subsequent requests may return an error to that effect, in which case you can simply use the `signin` method again.
 
 ### Getting a list of Meters or Virtual Meters
 
-Getting a list of meters or virtual meters is as simple as a call to the `meters` or `virtualmeters` method. This will provde a list containing dictionaries describing the various attributes of the virtual meter or meter, including it's registers.
+Getting a list of meters or virtual meters is as simple as a call to the `meters` or `virtualmeters` method. This will provide a list containing dictionaries describing the various attributes of the virtual meter or meter, including it's registers.
 
 It is assumed as a user of DCS that you have an appreciation of what these mean, but in summary, Meters represent the devices being monitored and within these Registers represent the particular meter reading "channel" or measurement that is being logged. There can be multiple registers for the same meter and they can be cumulative (meter readings) or instantaneous parameters - such as import kwh (cumulative), export kwh (cumulative), voltage (instantaneous), current (instantaneous). Virtual meters, as the name implies, are not real but instead produce data based on data from other registers (one or more) based on an expression/formula, and so the resulting data is presented in a similar way to a register.
 
-Most of the data provided by the `meters` or `virtualmeters` methods are essentially for information only, with exception to the ID numbers for registers and virtual meters as this can later be used to identify the them for reading retreival.
+Most of the data provided by the `meters` or `virtualmeters` methods are essentially for information only, with exception to the ID numbers for registers and virtual meters as this can later be used to identify the them for reading retrieval.
 
 Meters:
 It is possible to fetch a list of all meters that your credentials are allowed to access, and the registers within.
@@ -148,13 +148,12 @@ For more details on the output, please see the [DCS Web API Spec](https://github
 The important ID numbers you'll want for getting readings are the **id** of the **registers** under the Meters, such as _733_ in the example above, and ***NOT*** 405, or the **virtual meters** itself which is _9_ in the example above. These numbers can also be found within the DCS front end interface (the one for humans!) from the "Registers" tab when viewing meter data, or directly from the list of Virtual Meters Be sure you don't use the Meter ID by accident.
 
 
-
 ### Getting Readings Data
 
 This is likely the most important feature and the reason you are using this module.
 Two methods have been provided to access Register Data and Virtual Meter Data; `readings` will simply provide data from a single transaction, while `largereadings` will divide a large query (i.e. for a large time span) into multiple smaller transactions depending on a maximum window size. This may be useful where your server has query restrictions set up preventing you from requesting data for large time spans.
 
-Both cases will essentially behave the same using the same core parameters and should provide the same output. For smaller requests where multiple transactions are not needed, `largereadings` will use a single `readings` transaction and so its possible to exclusively use `largereadings` for all data requests without issue.
+Both cases will essentially behave the same using the same core parameters and should provide the same output. For smaller requests where multiple transactions are not needed, `largereadings` will use a single `readings` transaction and so it’s possible to exclusively use `largereadings` for all data requests without issue.
 
  To discriminate between the two sources of data, the respective Register IDs or Virtual Meter IDs are prepended by "R" or "VM" respectively and given as strings - for example, `"R130"` or `"VM9"` as in the examples above.
 
@@ -162,9 +161,9 @@ Both cases will essentially behave the same using the same core parameters and s
 small_results = dcs.readings(id, startTime, endTime, periodCount, calibrated, interpolated, periodType, iterator)
 results = dcs.leargereadings(id, startTime, endTime, periodCount, calibrated, interpolated, periodType, iterator, maxwindow=timedelta(days=365))
 ```
-This will return an object containing a list or iterator of readings for the specified register or virtual meter and timespan. The structure is approximately a python dictionary containing header information with a nested list/iterator containing a dictionaries for each reading. Readings will have a timezone aware datetime in UTC, the reading value as a float (typically the Total Value, or instantaneous value) and an integer status flag.
+This will return an object containing a list or iterator of readings for the specified register or virtual meter and timespan. The structure is approximately a python dictionary containing header information with a nested list/iterator containing a dictionary for each reading. Readings will have a time zone aware datetime in UTC, the reading value as a float (typically the Total Value, or instantaneous value) and an integer status flag.
 
-Using an iterator (`iterator=True` with `ijson` module) will yield one reading at a time which may be more memory efficient for large data sets but the values are not retained after consumption. If memory usage is not a concern or you need to retain the data, then the `iterator=False` (default) will simply return one single list of reads. In both cases, each element of the list or iterator will consist of a dictionary with values as floats and dates as timezone aware datetime objects.
+Using an iterator (`iterator=True` with `ijson` module) will yield one reading at a time which may be more memory efficient for large data sets but the values are not retained after consumption. If memory usage is not a concern or you need to retain the data, then the `iterator=False` (default) will simply return one single list of reads. In both cases, each element of the list or iterator will consist of a dictionary with values as floats and dates as time zone aware datetime objects.
 
 It is possible for the floats to represent positive and negative infinities or nan.
 
@@ -179,7 +178,7 @@ Parameters are as required by DCS:
 - **iterator** - boolean where False returns a single potentially large nested list, or True to return an iterator which streams and yields each reading as required. if the ijson module is not available, this option does nothing and is always equivelent to False.
 - **maxwindow** - (`largereadings` only) [timedelta](https://docs.python.org/3/library/datetime.html#timedelta-objects) representing the largest time period a single query may span before being broken into smaller transactions (Optional, default datetime.timedelta(days=365))
 
-Note: When using `readings`, the timespan covered by the request can be specified by including any 2 of startTime, endTime or periodCount. It is an error to specify anything other than 2. However, when using `largereadings`, periodCount cannot be used and you must explicitly provide the startTime and endTime. In both cases, if a datetime is provided which is timezone aware, this will be converted to UTC before being sent to the server. If it is naive it will be assumed to mean UTC (regardless of daylight savings in your region), and a plain date object will be assumed to be represent midnight UTC at the start of that date. See python documentation on [timezone aware and naive object](https://docs.python.org/3/library/datetime.html#aware-and-naive-objects).
+Note: When using `readings`, the timespan covered by the request can be specified by including any 2 of startTime, endTime or periodCount. It is an error to specify anything other than 2. However, when using `largereadings`, periodCount cannot be used and you must explicitly provide the startTime and endTime. In both cases, if a datetime is provided which is timezone aware, this will be converted to UTC before being sent to the server. If it is naive it will be assumed to mean UTC (regardless of daylight savings in your region), and a plain date object will be assumed to be represent midnight UTC at the start of that date. See python documentation on [time zone aware and naive objects](https://docs.python.org/3/library/datetime.html#aware-and-naive-objects).
 
 Example, using the meter and register from earlier and default values:
 
@@ -232,7 +231,7 @@ for item in results:
 ```
 
 For the **iterator** option to work, the `ijson` module must be installed, otherwise this has no effect.
-Using an iterator (`iterator=True` with `ijson` module) will yield one reading at a time which may be more memory efficient for extremely large data sets (i.e. multiple years of half hourly data etc.), particularly if, for example, you just want to calculate an average in pure python without retaining all the data for later use. However, if memory usage is not a concern or you need to retain and work on the data as native python objects (rther than a pandas DataFrame for example), then `iterator=False` (default) will simply return one single list of reads. This may potentially be very large. In both cases, each element of the list or iterator will consist of a dictionary as received by the server with all numbers as floats, and timestamps as timezone aware datetime objects. If you are immediately loading the data into some other data structure, for example a pandas DataFrame, or numpy Arrays or even performing SQL insertions etc. without retaining the original python object, it is recomended that you install the `ijson` module and use `iterator=True` as this will improve performance, reduce latency and reduce memory use.
+Using an iterator (`iterator=True` with `ijson` module) will yield one reading at a time which may be more memory efficient for extremely large data sets (i.e. multiple years of half hourly data etc.), particularly if, for example, you just want to calculate an average in pure python without retaining all the data for later use. However, if memory usage is not a concern or you need to retain and work on the data as native python objects (rather than a pandas DataFrame for example), then `iterator=False` (default) will simply return one single list of reads. This may potentially be very large. In both cases, each element of the list or iterator will consist of a dictionary as received by the server with all numbers as floats, and timestamps as timezone aware datetime objects. If you are immediately loading the data into some other data structure, for example a pandas DataFrame, or numpy Arrays or even performing SQL insertions etc. without retaining the original python object, it is recommended that you install the `ijson` module and use `iterator=True` as this will improve performance, reduce latency and reduce memory use.
 
 ### Signout
 
@@ -240,7 +239,7 @@ When you have finished, it's good practice to signout of the session so as not t
 ```
 dcs.signout()
 ```
-The singout method will not delete the DCSSession object and the `login` method may be used straight after. This can be used to login again or change credentials during execution.
+The singout method will not delete the DcsWebApi object and the `login` method may be used straight after. This can be used to login again or change credentials during execution.
 
 ### Usage as a Context Manager
 
@@ -255,17 +254,51 @@ with pythondcs.DcsWebApi("https://url-of-dcs-web-api/", "myUsername", "MySuperSe
 # Block signs out automatically
 ```
 
-## Basic Example
+### Exceptions
+
+Any exceptions raised by the underlying API call will be propagated to the caller and so it is for the higher level application to deal with them. This is most likely to be from providing an invalid or unauthorised register or virtual meter id number when getting readings for example. The only place this does not happen is with logging in where the error message from the server will be returned, or logging out where exceptions are simply ignored. If an exception occurs during login (i.e. invalid credentials), the DcsWebApi object will still be provided in an un-authenticated state where the `signing` method can be called again directly.
+
+### Concurrent Transactions
+
+This module has not specifically been designed to be thread-safe, but will probably work in multi-threaded environments just fine. There is however a thread-lock which deliberately limits each instance of a DcsWebApi object to a single concurrent transaction at a time (irrespective of number of threads which may be trying to work with it). This is primarily to protect the DCS server itself from being overwhelmed with concurrent transactions. Concurrent transactions are still possible with multiple DcsWebApi objects or, of course, multi-process environments.
+
+There is no limit to the rate at which consecutive transactions can occur other than what may be enforced by the DCS server via HTTP 429 statuses and X-Rate-Limit headers. If the rate limit is reached, the DcsWebApi method will simply wait for the time recommended by the server to retry and so this may be seen as a delayed response. The rate limiting in this case is imposed by the server and potentially triggered by and impacting on all users so care must be taken not to overwhelm the server with excessive/unnecessary small but fast requests - including invalid ones raising errors.
+
+### Other functions
+
+Additional functions are available in the `pythondcspro` module using the API driving the User Interface, but this is not officially supported by Coherent for third party use and so they are not fully documented and subject to breaking changes with differing versions of DCS. The functions provided have been reversed engineered from analysis of how the front-end user interface works and so they are to be used at your own risk. The `pythondcspro` module which is supplied as part of this project. This contains similar methods with similar functionality but with different names, parameters and outputs formats and so they are not directly interchangeable. Additional methods can modify the DCS database and so are to be used at your own risk. Please see the source code inline comments within this file for further details. This is recommended for advanced usage only and you take full responsibility if your data is inadvertently corrupted or destroyed!
+
+## Examples
+### Basic Readings Example
 ```
 import datetime
 import pythondcs
 dcs = pythondcs.DcsWebApi("https://url-of-dcs-web-api/", "myUsername", "MySuperSecurePassword")
 listofreadings = dcs.readings("R123", startTime=datetime.date(2019,1,1), endTime=datetime.date(2019,1,31))
-dcs.logout()
+dcs.signout()
 ```
-In this simple example, the appropriate modules are imported, including `datetime` to allow the start and end times to be provided correctly. The script then signs in, and downloads readings for register ID 123 for January 2019. This will default to calibrated, interpolated halfhourly given in UTC/GMT as would be the default as these parameters are ommitted. The session is then logged out.
+In this simple example, the appropriate modules are imported, including `datetime` to allow the start and end times to be provided correctly. The script then signs in, and downloads readings for register ID 123 for January 2019. This will default to calibrated, interpolated halfhourly given in UTC/GMT as would be the default as these parameters are omitted. The session is then signed out.
 
-## Elaborate Example
+### List all sources Example
+```
+import pythondcs
+dcs = pythondcs.DcsWebApi("https://url-of-dcs-web-api/", "myUsername", "MySuperSecurePassword")
+
+vms = dcs.virtualmeters()
+all_vm_ids = [ f"VM{vm['id']}" for vm in vms ]
+# ['VM123', 'VM456', ...]
+
+meters = dcs.meters()
+all_reg_ids = [ f"R{reg['id']}" for meter in meters for reg in meter['registers'] ]
+# ['R123', 'R456', ...]
+```
+This example generates two simple lists of all available virtual meter ids and register ids by using the `meters` and `virtualmeters` methods. These lists could potentially be merged together and then used in a loop to download data from every data source using `readings` or `largereadings`.
+
+For Virtual meters, its straightforward to extract the unique integer id from the list of dictionaries by using a list comprehension as in this example. This example uses f-strings to create a new list of ids as strings which are ready to use directly in the `readings` or `largereadings` methods.
+
+For Meters, the register and their ids are in a nested list within each dictionary for the parent meter, and so a nested list comprehension is used here. Otherwise, the final result is much the same.
+
+### Context Manager and Iterator Example
 ```
 from datetime import date
 from pythondcs import DcsWebApi
@@ -279,25 +312,53 @@ with DcsWebApi("https://url-of-dcs-web-api/", "myUsername", "MySuperSecurePasswo
 ```
 In this example, slightly more condensed namespaces are used, and a context manager is used to create an authenticated session which is then used to get a list of all virtual meters. This list (containing dictionaries) is then looped through to search for the first one with the name `"Virtual Meter of Interest"` (assuming this exists on the server) at which point the ID number is retained and loop broken. This is then used to efficiently (using a generator comprehension with `iterator=True` option) find the maximum halfhour demand value for that virtual meter between new year 2019 and the current day, given that the 'value' in each case is the usage in that period for Virtual Meters (This wouldn't be the case with Registers as the value represents the meter reading itself). The authenticated session is then automatically logged out upon leaving the `with` block.
 
-### Exceptions
+### pandas DataFrame Example
+```
+from datetime import date, timedelta
+import pandas as pd
+import pythondcs
 
-Any exceptions raised by the underlying API call will be propagated to the caller and so it is for the higher level application to deal with them. This is most likely to be from providing an invalid or unauthorised register or virtual meter id number when getting readings for example. The only place this does not happen is with logging in where the error message from the server will be returned, or logging out where exceptions are simply ignored. If an exception occurs during login (i.e. invalid credentials), the DcsWebApi object will still be provided in an un-authenticated state where the `signing` method can be called again directly.
+with pythondcs.DcsWebApi("https://url-of-dcs-web-api/", "myUsername", "MySuperSecurePassword") as dcs:
+    data = dcs.largereadings("R123", startTime=date(2019,1,1), endTime=date.today(), maxwindow=timedelta(days=28), iterator=True)
+    df = pd.DataFrame( data['readings'] )
+```
+This example obtains several years’ worth of data up to today using the 'largereadings' method in chunks of 28 days using the `maxwindow` option. This may be used when the server imposes a limit on the time span of data that can be retreived at one time. The resulting `data` will appear as if one transaction has been done. The initial `largereadings` call is almost instantaneous as the `iterator=True` option has been used and data is only consumed when it is loaded into a pandas DataFrame. Importing the data into a DataFrame is as simple as instantiating a DataFrame with the `readings` list or iterator in this case which will be more memory efficient and performant.
 
-### Concurrent Transactions
+The resulting DataFrame will have columns of the following types:
+```
+timestamp    datetime64[ns, UTC]
+value                    float64
+status                     int64
+dtype: object
+```
 
-This module has not specifically been designed to be thread-safe, but will probably work in multi-threaded environments just fine. There is however a thread-lock which deliberately limits each instance of a DCSSession object to a single concurrent transaction at a time (irrespective of number of threads which may be trying to work with it). This is primarily to protect the DCS server itself from being overwhelmed with concurrent transactions. Concurrent transactions are still possible with multiple DcsWebApi objects or, of course, multi-process environments.
+It's possible to use this code snippet almost verbatim to load data into [Microsoft Power BI Desktop using Python Scripting](https://docs.microsoft.com/en-gb/power-bi/connect-data/desktop-python-scripts), although as with all of these examples, care should be taken to keep your credential secure.
 
-There is no limit to the rate at which consecutive transactions can occur other than what may be enforced by the DCS server via HTTP 429 statuses and X-Rate-Limit headers. If the rate limit is reached, the DcsWebApi method will simply wait for the time recommended by the server to retry and so this may be seen as a delayed response. The rate limiting in this case is imposed by the server and potentially triggered by and impacting on all users so care must be taken not to overwhelm the server with excessive/unnecessary small but fast requests - including invalid ones raising errors.
+### SQL Database Example
+```
+from datetime import date, timedelta
+import sqlite3, pythondcs
 
-### Other functions
+sql=sqlite3.connect('file.db')
+_ = sql.execute("CREATE TABLE Readings (dataID, timestamp, value, status );")
 
-Additional functions are available in the `pythondcspro` module using the API driving the User Interface, but this is not officiall supported by Coherent for third party use and so they are not fully documented and subject to breaking changes with differing versions of DCS. The functions provided have been reversed engineered from analysis of how the front end user interface works and so they are to be used at your own risk. The `pythondcspro` module which is supplied as part of this project. This contains similar methods with similar functionality but with different names, parameters and outputs formats and so they are not directly interchangable. Additional methods can modify the DCS database and so are to be used at your own risk. Please see the source code inline comments within this file for further details. This is recomended for advanced usage only and you take full responsibilty if your data is inadvertently corrupted or destroyed!
+itemsOfInterest = ["R123", "VM456"]
+
+with pythondcs.DcsWebApi("https://url-of-dcs-web-api/", "myUsername", "MySuperSecurePassword") as dcs:
+    for id in itemsOfInterest:
+        data = dcs.largereadings(id, startTime=date(2022,1,1), endTime=date.today(), maxwindow=timedelta(days=14), iterator=True)
+        converteddata = ( {'dataID':id, **read } for read in data['readings'] )
+        response = sql.executemany("INSERT INTO Readings VALUES (:dataID, :timestamp, :value, :status);", converteddata)
+        sql.commit()
+        print( f"Written {response.rowcount} records for id {id}")
+```
+This example creates a very simple table in a SQL database and populates it with data from 2 sources into the same table. While SQLite is used here, many SQL libraries for python are very similar so the approach can be adapted. This example is similar to the previous pandas DataFrame example but in this case, multiple streams of data are downloaded for the same period of data and stored in the same table with the id being stored alongside the data. Optimisations such as converting timestamps to appropriate data types or using compounding indexing are beyond the scope of this example but would be advised.
 
 ## Author
 
 **Mark Jarvis** - [LinkedIn](https://www.linkedin.com/in/marksjarvis/) | [GitHub](https://github.com/jarvisms) | [PyPi](https://pypi.org/user/jarvism/)
 
-I'm employed by [University of Warwick Estates Office, Energy & Sustainability Team](https://warwick.ac.uk/about/environment) as a Sustainability Engineer and as part of this role I am responsible for managing the University's several thousand meters and remote metering infrastructure based on [Coherent Research's](http://coherent-research.co.uk/) equipment and DCS Software platform. While this module will inevitably be used within my work to cleanse, analyse and transfer data between other software platforms and may benefit other users within or collaborating with the University for research projects, this module was written **exclusively** as a personal project since I'm not employed as a software developer!
+I'm employed by [University of Warwick Estates Office, Energy & Sustainability Team](https://warwick.ac.uk/about/environment) as a Sustainability Engineer and as part of this role I am responsible for managing the University's several thousand meters and remote metering infrastructure based on [Coherent Research's](http://www.coherent-research.co.uk/) equipment and DCS Software platform. While this module will inevitably be used within my work to cleanse, analyse and transfer data between other software platforms and may benefit other users within or collaborating with the University for research projects, this module was written **exclusively** as a personal project since I'm not employed as a software developer!
 
 ## Contributions & Feature requests
 
@@ -305,8 +366,10 @@ For bugs, or feature requests, please contact me via GitHub or raise an [issue](
 
 ## License
 
-This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](https://github.com/jarvisms/pythondcs/blob/master/LICENSE) file for details
+This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details
 
 ## Acknowledgements
 
-* Thanks to [Coherent Research](http://coherent-research.co.uk/) for documentation and on going technical support.
+* Thanks to [Coherent Research](http://www.coherent-research.co.uk/) for documentation and ongoing technical support.
+
+
