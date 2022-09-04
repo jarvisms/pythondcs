@@ -362,18 +362,18 @@ class DcsWebApi:
             raise TypeError("Max window is smaller than the periodType")
         if None in (startTime, endTime):
             raise TypeError("You must explicitly provide a startTime and endTime if you want batching")
-        if isinstance(startTime, date):
-            startTime = datetime.combine(startTime, time(), timezone.utc)
-        elif isinstance(startTime, datetime):
+        if isinstance(startTime, datetime):
             startTime = startTime.astimezone(timezone.utc)
+        elif isinstance(startTime, date):
+            startTime = datetime.combine(startTime, time(), timezone.utc)
         else:
-            raise TypeError("The startTime isn't a 'date' or 'datetime' instance")
-        if isinstance(endTime, date):
-            endTime = datetime.combine(endTime, time(), timezone.utc)
-        elif isinstance(endTime, datetime):
+            raise TypeError("The startTime isn't a 'datetime' or 'date' instance")
+        if isinstance(endTime, datetime):
             endTime = endTime.astimezone(timezone.utc)
+        elif isinstance(endTime, date):
+            endTime = datetime.combine(endTime, time(), timezone.utc)
         else:
-            raise TypeError("The endTime isn't a 'date' or 'datetime' instance")
+            raise TypeError("The endTime isn't a 'datetime' or 'date' instance")
         if endTime < startTime: # Swap dates if reversed
             startTime, endTime = endTime, startTime
         if startTime == endTime:
