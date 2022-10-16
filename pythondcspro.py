@@ -550,3 +550,38 @@ class DCSSession():
                 timeout=self.timeout)
         reply.raise_for_status()
         return reply.json()
+    def create_user(self, user):
+        """Create a user define by the 'user' dictionary with
+        the parameters within. Returns the user details (like an
+        element from get_users). Minimum required parameters are:
+        'email', 'name' and 'role'"""
+        subpath = "/users/"
+        with self.lock:
+            reply = self.s.post(self.rooturl+subpath, json=user,
+                timeout=self.timeout)
+        reply.raise_for_status()
+        return reply.json()
+    def delete_user(self, userid):
+        """Delete a user with the id given by userid. Returns None."""
+        subpath = "/users/"
+        with self.lock:
+            reply = self.s.delete(self.rooturl+subpath+userid,
+                timeout=self.timeout)
+        reply.raise_for_status()
+        return
+    def get_meterrestrictions(self):
+        """Get a detailed list of all meter restriction profies"""
+        subpath = "/meterrestrictionprofiles"
+        with self.lock:
+            reply = self.s.get(self.rooturl+subpath,
+                timeout=self.timeout)
+        reply.raise_for_status()
+        return reply.json()
+    def get_idcrestrictions(self):
+        """Get a detailed list of all IDC restriction profies"""
+        subpath = "/idcrestrictionprofiles"
+        with self.lock:
+            reply = self.s.get(self.rooturl+subpath,
+                timeout=self.timeout)
+        reply.raise_for_status()
+        return reply.json()
