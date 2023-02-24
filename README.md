@@ -100,7 +100,7 @@ The data returned will look much like the pretty representation here, where the 
   },
   ...
   ...
-}]
+]
 ```
 Note that the order each element is given in the dictionaries can change.
 
@@ -139,7 +139,7 @@ The data returned will look much like the pretty representation here, where the 
   },
   ...
   ...
-}]
+]
 ```
 Note that the order each element is given in the dictionaries can change.
 
@@ -183,7 +183,7 @@ Note: When using `readings`, the timespan covered by the request can be specifie
 Example, using the meter and register from earlier and default values:
 
 ```
-results = dcs.leargereadings("R733, startTime=datetime(2021,9,20,18), endTime=datetime(2021,9,20,20))
+results = dcs.leargereadings("R733", startTime=datetime(2021,9,20,18), endTime=datetime(2021,9,20,20))
 ```
 
 The results will be structures as follows:

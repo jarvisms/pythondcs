@@ -77,18 +77,31 @@ class DcsWebApi:
                 tz, # Timezone
             )
     @classmethod
-    def _readingsgenerator(cls, parse_events):
-        """Provides an iterator of element from the 'readings' object in 'standard' format.
-        Converts timestamps to datetime objects and values to floats"""
+    def _readingsgenerator(cls, parse_events, format):
+        """Provides an iterator of element from the 'readings' object in 'standard' or
+        'complete' format. Converts timestamps to datetime objects and values to floats"""
         n=0
-        for item in ijson.items(parse_events,"readings.item", use_float=True):
-            item["timestamp"] = cls._fromisoformat(item["timestamp"])
-            item["value"] = float(item["value"])
-            yield item
-            n+=1
+        if format == "standard":
+            for item in ijson.items(parse_events,"readings.item", use_float=True):
+                item["timestamp"] = cls._fromisoformat(item["timestamp"])
+                item["value"] = float(item["value"])
+                yield item
+                n+=1
+        elif format == "complete":
+            for item in ijson.items(parse_events,"readings.item", use_float=True):
+                item["timestamp"] = cls._fromisoformat(item["timestamp"])
+                item["totalValue"] = float(item["totalValue"])
+                item["periodValue"] = float(item["periodValue"])
+                yield item
+                n+=1
+        else:
+            for item in ijson.items(parse_events,"readings.item", use_float=True):
+                item["timestamp"] = cls._fromisoformat(item["timestamp"])
+                yield item
+                n+=1
         logging.info(f"All {n} readings retreived")
     @classmethod
-    def _iterjson_reads(cls, reply):
+    def _iterjson_reads(cls, reply, format):
         """Takes the http response and decodes the json payload by streaming it,
         decompressing it if required, and decoding it into a dictionary with an
         iterator in place of the 'readings' using the _readingsgenerator method.
@@ -107,19 +120,30 @@ class DcsWebApi:
                 results[path] = cls._fromisoformat(value) if path in ("startTime", "endTime") else value
             elif name == "map_key" and value == "readings":
                 break
-        results["readings"] = cls._readingsgenerator(parse_events)
+        results["readings"] = cls._readingsgenerator(parse_events, format)
         return results
     @classmethod
-    def _json_reads(cls, reply):
+    def _json_reads(cls, reply, format):
         """Takes the http response and decodes the json payload as one object
-        converting timestamps to datetime objects and all readng values to floats"""
+        converting timestamps to datetime objects and all reading values to floats"""
         results = reply.json()
         results["startTime"] = cls._fromisoformat(results["startTime"])
         results["endTime"] = cls._fromisoformat(results["endTime"])
-        for item in results["readings"]:
-            # Convert to datetimes
-            item["timestamp"] = cls._fromisoformat(item["timestamp"])
-            item["value"] = float(item["value"])
+        if format == "standard":
+            for item in results["readings"]:
+                # Convert to datetimes and floats
+                item["timestamp"] = cls._fromisoformat(item["timestamp"])
+                item["value"] = float(item["value"])
+        elif format == "complete":
+            for item in results["readings"]:
+                # Convert to datetimes and floats
+                item["timestamp"] = cls._fromisoformat(item["timestamp"])
+                item["totalValue"] = float(item["totalValue"])
+                item["periodValue"] = float(item["periodValue"])
+        else:
+            for item in results["readings"]:
+                # Convert to datetimes
+                item["timestamp"] = cls._fromisoformat(item["timestamp"])
         logging.info(f"All {len(results['readings'])} readings retreived")
         return results
     @classmethod
@@ -254,7 +278,7 @@ class DcsWebApi:
         else:
             return reply.json()
     def readings(self, id, startTime=None, endTime=None, periodCount=None,
-        calibrated=True, interpolated=True, periodType="halfhour", iterator=False):
+        calibrated=True, interpolated=True, periodType="halfhour", format="standard", iterator=False):
         """
         Returns a list or iterator of readings for the specified register or virtual meter and timespan.
         Structure is approximately a Dict containing header information with a nested list of readings
@@ -281,6 +305,7 @@ class DcsWebApi:
         - "interpolated" - boolean for whether gaps should be linearly filled (Optional, default True)
         - "periodType" - string of "halfHour", or "hour",
             "day", "week", "month" (Optional, default halfhour)
+        - "format" - string of "standard", or "complete" (Optional, default "standard")
         - "iterator" - False to return a single potentially larget nested list, or
             True to return an iterator which streams and yields each item.
             if the ijson module is not available, this option does nothing and
@@ -291,14 +316,14 @@ class DcsWebApi:
         if (startTime,endTime,periodCount).count(None) != 1:
             raise TypeError("Only two parameters are permitted from startTime, endTime and periodCount")
         dataparams = {
-            'id'                : id,           # String, such as "R123" or "VM456"
-            'format'            : "standard",   # Currently only "standard" is supported
-            'startTime'         : startTime,    # if None, it wont get arsed to the url
-            'endTime'           : endTime,      # If None, it wont get parsed to the url
-            'periodCount'       : periodCount,  # If None, it wont get parsed to the url
-            'calibrated'        : calibrated,   # Boolean
-            'interpolated'      : interpolated, # Boolean
-            'periodType'        : periodType,   # Enum: "halfHour" "hour" "day" "week" "month"
+            'id'           : id,                 # String, such as "R123" or "VM456"
+            'format'       : format.lower(),     # Enum: "standard" "complete"
+            'startTime'    : startTime,          # if None, it wont get arsed to the url
+            'endTime'      : endTime,            # If None, it wont get parsed to the url
+            'periodCount'  : periodCount,        # If None, it wont get parsed to the url
+            'calibrated'   : calibrated,         # Boolean
+            'interpolated' : interpolated,       # Boolean
+            'periodType'   : periodType.lower(), # Enum: "halfHour" "hour" "day" "week" "month"
         }
         subpath = "/public/readings" if self.username is None else "/readings"
         # Convert to ISO strings assuming datetimes or dates were given
@@ -319,9 +344,9 @@ class DcsWebApi:
         logging.info(f"Got readings for {id}, server response time: {reply.elapsed.total_seconds()}s")
         if iterator and IJSONAVAILABLE:
             # The user must ask for an iterator AND the module must be available
-            return self._iterjson_reads(reply)
+            return self._iterjson_reads(reply, format)
         else:
-            return self._json_reads(reply)
+            return self._json_reads(reply, format)
     def largereadings(self, *args, maxwindow=timedelta(days=365), periodCount=None,
         startTime=None, endTime=None, iterator=False, periodType="halfHour", **kwargs):
         """
