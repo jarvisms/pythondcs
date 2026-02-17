@@ -159,7 +159,7 @@ Both cases will essentially behave the same using the same core parameters and s
 
 ```
 small_results = dcs.readings(id, startTime, endTime, periodCount, calibrated, interpolated, periodType, iterator)
-results = dcs.leargereadings(id, startTime, endTime, periodCount, calibrated, interpolated, periodType, iterator, maxwindow=timedelta(days=365))
+results = dcs.largereadings(id, startTime, endTime, periodCount, calibrated, interpolated, periodType, iterator, maxwindow=timedelta(days=365))
 ```
 This will return an object containing a list or iterator of readings for the specified register or virtual meter and timespan. The structure is approximately a python dictionary containing header information with a nested list/iterator containing a dictionary for each reading. Readings will have a time zone aware datetime in UTC, the reading value as a float (typically the Total Value, or instantaneous value) and an integer status flag.
 
@@ -169,8 +169,8 @@ It is possible for the floats to represent positive and negative infinities or n
 
 Parameters are as required by DCS:
 - **id** - string of the register or virtual meter prepended by R or VM (Required)
-- **startTime** - a python [datetime](https://docs.python.org/3/library/datetime.html#datetime-objects) or [date](https://docs.python.org/3/library/datetime.html#date-objects) object, such as `datetime.date(2019,1,1)`. (Required, see note)
-- **endTime** - a datetime or date object as above. (Required, see note)
+- **startTime** - a python [datetime](https://docs.python.org/3/library/datetime.html#datetime-objects) or [date](https://docs.python.org/3/library/datetime.html#date-objects) object, such as `datetime.date(2019,1,1)`. The results will include data starting with this timestamp. (Required, see note)
+- **endTime** - a datetime or date object as above. The results will exclude data starting with this timestamp i.e. upto but not including midnight. This is different to the website user interface behaviour as the API allows the exact time to be specified while the website does not. (Required, see note)
 - **periodCount** - (`readings` only) integer number of periodTypes (Optional, see note)
 - **calibrated** - boolean for whether values should be calibrated (Optional, default True)
 - **interpolated** - boolean for whether gaps should be linearly filled (Optional, default True)
@@ -183,7 +183,7 @@ Note: When using `readings`, the timespan covered by the request can be specifie
 Example, using the meter and register from earlier and default values:
 
 ```
-results = dcs.leargereadings("R733", startTime=datetime(2021,9,20,18), endTime=datetime(2021,9,20,20))
+results = dcs.largereadings("R733", startTime=datetime(2021,9,20,18), endTime=datetime(2021,9,20,20))
 ```
 
 The results will be structures as follows:
