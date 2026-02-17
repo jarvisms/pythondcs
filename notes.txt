@@ -1,0 +1,21 @@
+urls need updating in docs
+/authentication/signout needs to be documented too
+
+
+/readings
+instantaneous VM (periodtype must be halfhour) (interpolation must be True) (Calibration has no effect)
+instantaneous Register (periodType has no effect **** should be halfhour only for instantaneous) (interpolation has no effect **** should always be False) (calibration has no effect)
+
+nan and infs just gives error 500
+
+
+/meters
+defaultScaleFactor and ScaleFactor both strings and not floats and one of these is always redundant.
+Could have "effectiveScaleFactor" instead returned as a float:
+effectiveScaleFactor = float(defaultScaleFactor) if ScaleFactor == "" else float(scaleFactor)
+
+cant fetch one by id?
+
+/virtualmeters
+cant fetch on by id
+

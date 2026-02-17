@@ -414,13 +414,13 @@ class DcsWebApi:
             (periodType == "day" and not ( # Check its a clean day
             endTime.microsecond == endTime.second == endTime.minute == endTime.hour == startTime.microsecond == startTime.second == startTime.minute == startTime.hour == 0
             )) or
-            (periodType == "week" and not ( # Check its a clean week starting on Monday and ending on Sunday
+            (periodType == "week" and not ( # Check its a clean week starting on (and therfore including) Monday and ending on (but not including) another Monday
             endTime.microsecond == endTime.second == endTime.minute == endTime.hour == startTime.microsecond == startTime.second == startTime.minute == startTime.hour == 0 and
-            (startTime.weekday(), endTime.weekday()) == (0,6)
+            startTime.weekday() == endTime.weekday() == 0
             )) or
-            (periodType == "month" and not ( # Check its a clean month starting on the 1st and ending on whatever the last day of the month is for that month and year
+            (periodType == "month" and not ( # Check its a clean month starting on (and therfore including) the 1st and ending on (but not including) another 1st
             endTime.microsecond == endTime.second == endTime.minute == endTime.hour == startTime.microsecond == startTime.second == startTime.minute == startTime.hour == 0 and
-            startTime.day == 1 and endTime.day == ((endTime.replace(month=endTime.month+1, day=1) if endTime.month < 12 else endTime.replace(year=endTime.year+1, month=1, day=1)) - timedelta(days=1)).day
+            startTime.day == endTime.day == 1
             )) ):
             raise TypeError("The startTime and endTime must be aligned with the periodType")
         maxwindow=abs(maxwindow)  # Strip negative durations and dont go too small
@@ -433,7 +433,7 @@ class DcsWebApi:
             return self.readings(*args, startTime=startTime, endTime=endTime, periodType=periodType, iterator=iterator, **kwargs)
         else:   # If the period is larger than max, then break it down
             if periodType == "month":
-                reqperiods = (endTime.year-startTime.year)*12 + (endTime.month-startTime.month) + 1 # Requested duration counted in months
+                reqperiods = (endTime.year-startTime.year)*12 + (endTime.month-startTime.month) # Requested duration counted in months
             else:
                 reqperiods = reqwindow // ptd # Requested duration in periods
             maxperiods = maxwindow // ptd # Maximum duration in periods
@@ -452,21 +452,14 @@ class DcsWebApi:
             logging.info(f"{len(periodsBlocks)} transactions will be used")
             Intervals=[]
             IntervalStart = startTime   # The first starttime is the original start
-            if periodType == "month":
-                for i in periodsBlocks:
-                    # Add calculated number of half hours on to the start time
-                    IntervalEnd = IntervalStart + i * ptd
-                    IntervalEnd = IntervalEnd.replace(day=1) - timedelta(days=1)
-                    # Define each sample window  and start the next one after the last
-                    Intervals.append({"startTime":IntervalStart,"endTime":IntervalEnd})
-                    IntervalStart = IntervalEnd + timedelta(days=1)
-            else:
-                for i in periodsBlocks:
-                    # Add calculated number of half hours on to the start time
-                    IntervalEnd = IntervalStart + i * ptd
-                    # Define each sample window  and start the next one after the last
-                    Intervals.append({"startTime":IntervalStart,"endTime":IntervalEnd})
-                    IntervalStart = IntervalEnd
+            for i in periodsBlocks:
+                # Add calculated number of periods to the start date
+                IntervalEnd = IntervalStart + i * ptd
+                if periodType == "month":
+                    IntervalEnd = IntervalEnd.replace(day=1)
+                # Define each sample window and start the next one after the last
+                Intervals.append({"startTime":IntervalStart,"endTime":IntervalEnd})
+                IntervalStart = IntervalEnd
         if iterator:
             result = {
                 "startTime" : Intervals[0]["startTime"],
