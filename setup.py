@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="pythondcs",
-    version="1.1.0",
+    version="1.1.1",
     author="Mark Jarvis",
     description="Python Module for interfacing with the Coherent Research DCS v3+ remote metering server",
     long_description=long_description,
@@ -36,6 +36,7 @@ setuptools.setup(
         "Programming Language :: Python :: 3.12",
         "Programming Language :: Python :: 3.13",
         "Programming Language :: Python :: 3.14",
+        "Programming Language :: Python :: 3.15",
         "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
         "Operating System :: OS Independent",
         "Natural Language :: English",
